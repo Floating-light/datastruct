@@ -1,4 +1,5 @@
 #include "LVector.hpp"
+#include "stdlib.h"
 
 template <typename T>
 void LVector<T>::copyFrom(T const* A, Rank low, Rank high){
@@ -10,7 +11,8 @@ void LVector<T>::copyFrom(T const* A, Rank low, Rank high){
     }
 }
 
-template <typename T> LVector<T> & LVector<T>::operator= (LVector<T> const& v){
+template <typename T> 
+LVector<T> & LVector<T>::operator= (LVector<T> const& v){
     if(_elem)
         delete [] _elem;
     copyFrom(v, 0, v._size);
@@ -26,4 +28,27 @@ template <typename T> void LVector<T>::expand(){
     _elem = new T[_capacity <<= 1];
     copyFrom(oldElem, 0, _size);
     delete oldElem;
+}
+
+template <typename T>
+void LVector<T>::shrink(){
+    if(_capacity < DEFAULT_CAPACITY<<1) return;
+    if(_capacity < _size << 2) return;
+    T* oldElem = _elem;
+    _elem = new T[_capacity >> 1];
+    for(int i = 0; i < _size; ++i) _elem[i] = oldElem[i];
+    delete [] oldElem;
+}
+
+template <typename T> 
+T& LVector<T>::operator[](Rank i) {
+    return _elem[i];
+}
+
+template <typename T>
+void LVector<T>::unsort(Rank low, Rank high){
+    T* v = _elem + low;
+    for(Rank i = high - low; i > 0; ++i){
+        swap(v[i - 1], v(rand() % i));
+    }
 }
