@@ -7,18 +7,18 @@ template <typename T> void LVector<T>::print(){
         if(i % 10 == 0) std::cout << std::endl;
         std::cout << _elem[i] << "  ";
     }
+    std::cout << "The size of this vector: " << _size << std::endl;
+    std::cout << "The capacity of this vector: " << _capacity << std::endl;
 }
 
 template <typename T>
 void LVector<T>::copyFrom(T const* A, Rank low, Rank high){
-    std::cout << "enter copy from"<< std::endl;
     _elem = new T[_capacity = (high - low)*2];
     _size = 0;
     //time complexity => O(high - low) => O(_size)
     while(low < high){
         _elem[_size++] = A[low++];
     }
-    std::cout << "exit copy from:"<< this->_capacity << "*****" << this->_size << std::endl;
 }
 
 template <typename T> 
@@ -36,10 +36,8 @@ template <typename T> void LVector<T>::expand(){
         _capacity = DEFAULT_CAPACITY;
     T *oldElem = _elem;
     _elem = new T[_capacity <<= 1];
-    //copyFrom(oldElem, 0, _size);
-    for(int i =0; i < _size ; ++i)
-        _elem[i] = oldElem[i];
-    delete [] oldElem;//make 
+    copyFrom(oldElem, 0, _size);
+    delete [] oldElem;
 }
 
 template <typename T>
@@ -47,7 +45,7 @@ void LVector<T>::shrink(){
     if(_capacity < DEFAULT_CAPACITY<<1) return;
     if(_capacity < _size << 2) return;
     T* oldElem = _elem;
-    _elem = new T[_capacity >> 1];
+    _elem = new T[_capacity >>= 1];
     for(int i = 0; i < _size; ++i) _elem[i] = oldElem[i];
     delete [] oldElem;
 }
@@ -60,8 +58,8 @@ T& LVector<T>::operator[](Rank i) {
 template <typename T>
 void LVector<T>::unsort(Rank low, Rank high){
     T* v = _elem + low;
-    for(Rank i = high - low; i > 0; ++i){
-        swap(v[i - 1], v(rand() % i));
+    for(Rank i = high - low; i > 0; --i){
+        std::swap(v[i - 1], v[rand() % i]);
     }
 }
 
@@ -76,10 +74,54 @@ Rank LVector<T>::find(T const& e, Rank low, Rank high){
 
 template <typename T>
 Rank LVector<T>::insert(T const& e, Rank r){
+    //Because c++ do not check array range,so ,if r == 1000 or something else,
+    //it will see be ok,and you will get something **@#$%^&*()
+    //assert(0 <= r <= _size)
+    assert(0 <= r && r <= _size);
     expand();
-    for(Rank i = _size; i > r; --r)
-        _elem[r] = _elem[r - 1];
+    for(Rank i = _size; i > r; --i)
+        _elem[i] = _elem[i - 1];
     _elem[r] = e;
+    ++_size;
     return r;
 }
+
+template <typename T> 
+Rank LVector<T>::remove(Rank low, Rank high){
+    assert(0 <= low && low < high && high <= _size);
+    while(high < _size) _elem[low++] = _elem[high++];
+    _size = low;
+    shrink();
+    return high - low;
+}
+
+template <typename T>
+Rank LVector<T>::remove(Rank r){
+    assert(0<= r && r < _size);
+    T e = _elem[r];
+    remove(r, r+1);
+    return e;
+}
+
+template <typename T>
+int LVector<T>::deduplicate(){
+    int oldSize = _size;
+    Rank i = 1;
+    while(i < _size)
+        (find(_elem[i], 0, i) < 0) ? ++i : remove(i);
+    return oldSize - _size; 
+}
+
+template <typename T>
+void LVector<T>::traverse(void (*visit) (T& )){
+    for(int i = 1; i < _size; ++i)
+        visit(_elem[i]);
+}
+
+template <typename T> template <typename TVS>//function object
+void LVector<T>::traverse(TVS& visit){
+    for (int i = 0; i < _size; ++i)
+        visit(_elem[i]);
+}
+
 #endif

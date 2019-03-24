@@ -8,4 +8,4 @@ test: LVector.hpp LVectorTest.cpp
 	g++ -o vectest.exe LVectorTest.o LVector.o
 	./vectest.exe
 clean: 
-	rm *.exe
+	rm *.exe *.o 
