@@ -2,8 +2,10 @@ sundry: sundrycode.cpp
 	g++ -o sundry.exe sundrycode.cpp
 	./sundry.exe
 
-test: LVector.cpp LVector.hpp
-	g++ -o vectest.exe LVector.cpp LVectorTest.cpp
+test: LVector.hpp LVectorTest.cpp
+	g++ -o LVector.o -c LVector.cpp
+	g++ -o LVectorTest.o -c LVectorTest.cpp
+	g++ -o vectest.exe LVectorTest.o LVector.o
 	./vectest.exe
 clean: 
 	rm *.exe
