@@ -7,7 +7,7 @@ template <typename T> void LVector<T>::print(){
         if(i % 10 == 0) std::cout << std::endl;
         std::cout << _elem[i] << "  ";
     }
-    std::cout << "The size of this vector: " << _size << std::endl;
+    std::cout << std::endl << "The size of this vector: " << _size << std::endl;
     std::cout << "The capacity of this vector: " << _capacity << std::endl;
 }
 
@@ -75,7 +75,7 @@ Rank LVector<T>::find(T const& e, Rank low, Rank high){
 template <typename T>
 Rank LVector<T>::insert(T const& e, Rank r){
     //Because c++ do not check array range,so ,if r == 1000 or something else,
-    //it will see be ok,and you will get something **@#$%^&*()
+    //it will see be ok,and you will get something 11 like corrected.
     //assert(0 <= r <= _size)
     assert(0 <= r && r <= _size);
     expand();
@@ -118,10 +118,72 @@ void LVector<T>::traverse(void (*visit) (T& )){
         visit(_elem[i]);
 }
 
-template <typename T> template <typename TVS>//function object
+template <typename T> template <typename TVS>
 void LVector<T>::traverse(TVS& visit){
     for (int i = 0; i < _size; ++i)
         visit(_elem[i]);
 }
+
+template <typename T>
+int LVector<T>::disordered() const{
+    int n = 0;
+    for(int i = 1; i < _size; ++i){
+        if(_elem[i - 1] > _elem[i]){
+            ++n;
+        }
+    }
+    return n;
+}
+
+template <typename T> 
+int LVector<T>::uniquify() {
+    int i = 0;
+    int j = 0;
+    while(++j < _size){
+        if(_elem[i] != _elem[j])
+            _elem[++i] = _elem[j];
+    }
+    shrink();
+    _size = ++i;
+    return j - i;
+}
+
+template <typename T>
+int LVector<T>::uniquifySlowly(){
+    int i = 1;
+    int oldSize = _size;
+    while (i < _size){
+        _elem[i - 1] == _elem[i] ? remove(i) : ++i;
+    }
+    return oldSize - _size;
+}
+
+template <typename T> 
+Rank LVector<T>::search(T const& e, Rank low, Rank high){
+    return rand()%2 ? binSearch(_elem, e, low, high) : fibSearch(_elem, e, low, high);
+} 
+
+template <typename T>
+Rank LVector<T>::search(T const& e){
+    return _size <= 0 ? -1 : search(e, 0, _size);
+}
+
+//Complixty = o(log n)
+template <typename T> 
+static Rank LVector<T>::binSearch(T* A, T const& e, Rank low, Rank high){
+    Rank mid = (high + low) >> 1;
+    while(low < high){
+        if(A[mid] < e){
+            low = ++mid;
+        }else if(A[mid] > e){
+            high = mid;
+        }else{
+            return mid;
+        }
+    }
+    return -1;
+}
+
+
 
 #endif

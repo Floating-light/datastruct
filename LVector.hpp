@@ -44,12 +44,38 @@ public:
     Rank remove(Rank low, Rank high);
 
     Rank remove(Rank r);
-
+    
     int deduplicate();
-
+    
+    //Traverse by function pointer
     void traverse(void (*visit ) (T& ));
     
+    //Traverse by funcion object,the type TVS must overloaded () operator
     template <typename TVS> void traverse(TVS& );
+
+    //Check whether is ordered
+    //const member function,this function can not change any member varibale(except mutable varibale)
+    //also can not call any non-const member function
+    int disordered() const;
+    
+    //complixty is o(n)
+    //if remove element one by one when traversing the _elem,
+    //the complixty will be o(n^2)
+    int uniquify() ;
+
+    //o(n^2) implement
+    int uniquifySlowly();
+    
+    Rank search(T const& e, Rank low, Rank high);
+
+    Rank search(T const& e);
+    
+    //Static memebr is independent of any object,instead is assosiate with class itself
+    //So static memeber function have not this pointer,and can't access non-static member
+    //All the static data member is shared by all class instance.
+    static Rank binSearch(T* A, T const& e, Rank low, Rank high);
+
+    static Rank fibSearch(T* A, T const& e, Rank low, Rank high);
 };
 
 template <typename T>
@@ -61,6 +87,6 @@ void permute(LVector<T> v){
 //The tenplate class must be defined 100% within the head file,
 //but we can just include the implemente in the head file to aviod that.
 //usually this is a bad idea, but is convenice
-//or you change the implemente file name with .impl
+//or you can change the implementation file name with .impl
 #include "LVector.cpp"
 #endif

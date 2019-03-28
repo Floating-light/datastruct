@@ -1,6 +1,13 @@
 #include "LVector.hpp"
 #include <iostream>
 
+struct test{
+    //function object ,overloaded () operator
+    void operator() (int i){
+        std::cout << "Increase one : " << ++i << std::endl;
+    }
+};
+
 void visit(int& temp){
     std::cout << "===========>" << temp << std::endl;
 }
@@ -13,6 +20,7 @@ int (*funcp)(int i,char c){
 }*/
 
 int main(int argc, char **argv){
+    test currTest;
     LVector<int> lv;
     for(int i = 0; i < 10; ++i)
         lv.insert(i, i);
@@ -26,7 +34,13 @@ int main(int argc, char **argv){
     lv.deduplicate();
     lv.print();
 
-    lv.traverse(visit);
+    lv.traverse(currTest);
+    lv.print();
+
     
+    std::cout << "Is ordered ?====>>: " << lv.disordered()<< std::endl;
+
+    std::cout << "Deleted element number : " << lv.uniquify() << std::endl;
+    lv.print();
     return 0;
 }
