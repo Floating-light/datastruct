@@ -20,27 +20,19 @@ int (*funcp)(int i,char c){
 }*/
 
 int main(int argc, char **argv){
-    test currTest;
     LVector<int> lv;
     for(int i = 0; i < 10; ++i)
-        lv.insert(i, i);
-    lv.unsort(0,10);
+        lv.insert((rand()%100), i);
+    lv.print(); 
+    lv.sort(0,10);
     lv.print();
-
-    lv.insert(2,2);
-    lv.insert(3,5);
+    lv.unsort(0, 10);
     lv.print();
-
-    lv.deduplicate();
+    lv.sort(0, 10);
     lv.print();
+    //std::cout << "The position of the element 3: " << lv.search(3) << std::endl;
+    //std::cout << "The position of the element 2: " << lv.search(2) << std::endl;
+    //std::cout << "The position of the element 0: " << lv.search(0) << std::endl;
 
-    lv.traverse(currTest);
-    lv.print();
-
-    
-    std::cout << "Is ordered ?====>>: " << lv.disordered()<< std::endl;
-
-    std::cout << "Deleted element number : " << lv.uniquify() << std::endl;
-    lv.print();
     return 0;
 }

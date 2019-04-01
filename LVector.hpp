@@ -59,7 +59,7 @@ public:
     int disordered() const;
     
     //complixty is o(n)
-    //if remove element one by one when traversing the _elem,
+    //if remove element one by one when traversing the _elem//   ,
     //the complixty will be o(n^2)
     int uniquify() ;
 
@@ -70,20 +70,31 @@ public:
 
     Rank search(T const& e);
     
+    //unified sort entrance
+    void sort(Rank low, Rank high);
+    
+    void mergeSort(Rank low, Rank high);
+
+    void merge(Rank low, Rank mid, Rank high);
     //Static memebr is independent of any object,instead is assosiate with class itself
     //So static memeber function have not this pointer,and can't access non-static member
     //All the static data member is shared by all class instance.
-    static Rank binSearch(T* A, T const& e, Rank low, Rank high);
+    Rank binSearch(T* A, T const& e, Rank low, Rank high);
+    Rank binSearch_B(T* A, T const& e, Rank low, Rank high);
+    Rank binSearch_C(T* A, T const& e, Rank low, Rank high);
 
-    static Rank fibSearch(T* A, T const& e, Rank low, Rank high);
+    Rank fibSearch(T* A, T const& e, Rank low, Rank high);
+    
+    void bubbleSort(Rank low, Rank high);
+    bool bubble(Rank low, Rank high);
 };
-
+/*
 template <typename T>
 void permute(LVector<T> v){
     for(int i = v._size; i > 0; --i){
         swap(v[i-1], v[rand() % i]);
     }
-}
+}*/
 //The tenplate class must be defined 100% within the head file,
 //but we can just include the implemente in the head file to aviod that.
 //usually this is a bad idea, but is convenice

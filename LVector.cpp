@@ -160,7 +160,7 @@ int LVector<T>::uniquifySlowly(){
 
 template <typename T> 
 Rank LVector<T>::search(T const& e, Rank low, Rank high){
-    return rand()%2 ? binSearch(_elem, e, low, high) : fibSearch(_elem, e, low, high);
+    return rand()%2 ? binSearch(_elem, e, low, high) : binSearch_C(_elem, e, low, high);
 } 
 
 template <typename T>
@@ -168,11 +168,13 @@ Rank LVector<T>::search(T const& e){
     return _size <= 0 ? -1 : search(e, 0, _size);
 }
 
-//Complixty = o(log n)
+//Complixty = o(1.5 log n)
+//耗时主要在元素大小的比较,特别是当元素为复杂对象时.
+//Disadvantage：不同情况查找长度不均衡，在每步迭代中为确定左右分支方向 需分别做一到两次元素比较
 template <typename T> 
-static Rank LVector<T>::binSearch(T* A, T const& e, Rank low, Rank high){
-    Rank mid = (high + low) >> 1;
+Rank LVector<T>::binSearch(T* A, T const& e, Rank low, Rank high){
     while(low < high){
+        Rank mid = (high + low) >> 1;
         if(A[mid] < e){
             low = ++mid;
         }else if(A[mid] > e){
@@ -184,6 +186,77 @@ static Rank LVector<T>::binSearch(T* A, T const& e, Rank low, Rank high){
     return -1;
 }
 
+template <typename T>
+Rank LVector<T>::binSearch_B(T* A, T const& e, Rank low, Rank high){
+    while(1 < high - low){
+        Rank mid = (high + low) >> 1;
+        //only one compare 
+        (e < A[mid]) ? high = mid : low = mid;
+    }
+    return (e == A[low]) ? low : -1;
+    //Can not return fail position
+    //If hit multiple element,can not return the max rank element
+}
 
+template <typename T>
+Rank LVector<T>::binSearch_C(T* A, T const& e, Rank low, Rank high){
+    while(low < high) {
+        Rank mid = (high - low) >> 1;
+        (e < A[mid]) ? high = mid : low = mid + 1;
+    }
+    return --low;
+    //return the last element <= e;maybe e or the element < e
+}
 
+template <typename T>
+void LVector<T>::sort(Rank low, Rank high){
+    switch(2/*rand() % 1*/){
+        case 1: bubbleSort(low, high); 
+                break;
+        case 2: mergeSort(low, high);
+    }
+}
+
+template <typename T>
+void LVector<T>::bubbleSort(Rank low, Rank high){
+    while(!bubble(low, high--));
+}
+
+template <typename T>
+bool LVector<T>::bubble(Rank low, Rank high){
+    bool sorted = true;
+    while(++low < high){
+        if(_elem[low - 1] > _elem[low]){
+            sorted = false;
+            std::swap(_elem[low - 1], _elem[low]);
+        }
+    }
+    return sorted;
+}
+
+template <typename T> 
+void LVector<T>::mergeSort(Rank low, Rank high){
+    if(high - low < 2) return;
+    Rank mid = (high + low) /2;
+    mergeSort(low, mid);
+    mergeSort(mid, high);
+    merge(low, mid, high);
+}
+
+template <typename T>
+void LVector<T>::merge(Rank low, Rank mid, Rank high){
+    T* A = _elem + low;
+    int lb = mid - low;
+    T* B = new T[lb];
+    for(Rank i = 0; i < lb; i++) B[i] = A[i];
+    int lc = high - mid;
+    T* C = _elem + mid;
+    for(Rank i = 0, j = 0, k = 0; (j < lb) /*|| (k < lc)*/; ){
+        //if((j < lb) && (!(k < lc) || (B[j] <= C[k]))) A[i++] = B[j++];
+        //if((k < lc) && (!(j < lb) || (C[k] < B[j] ))) A[i++] = C[k++];
+        if((k < lc) && (C[k] < B[j])) A[i++] = C[k++];
+        if((lc <= k) || B[j] <= C[k]) A[i++] = B[j++];
+    }
+    delete [] B;
+}
 #endif
