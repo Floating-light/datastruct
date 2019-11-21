@@ -10,5 +10,8 @@ test: LVector.hpp LVectorTest.cpp
 CopyControl:
 	g++ -g -o copycontrol.exe ./primer/chapter13/CopyControl/copycontrol.cpp
 	./copycontrol.exe
+leetcode: 
+	g++ -g -o leetcode.exe ./leetcode/isMatch/isMatch.cpp
+	./leetcode.exe
 clean: 
 	rm *.exe *.o 
