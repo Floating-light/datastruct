@@ -47,7 +47,9 @@ class PrivateCopy
     //copy constrol is private and so is inaccessible to ordinary user code. 
     PrivateCopy(const PrivateCopy&);
     PrivateCopy& operator=(const PrivateCopy&);
-    //to prevent copies by friends and members, we declared
+    //to prevent copies by friends and members, we declare these members as private 
+    //but do not define them(link error).Only with one exception, which (15.2.1 p594)  is legal
+    //to declare, but not define a member function.
 public:
     PrivateCopy() = default;
     ~PrivateCopy();
