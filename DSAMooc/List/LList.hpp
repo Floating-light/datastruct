@@ -42,22 +42,32 @@ public: // constructor and interface
     bool disordered();
 
     void sort();
-
+    //unordered o(n)
     Posi(T) find(T const& e) const;
-
-    Posi(T) search(T e);
     
-    //For unordered list.
-    //Given the element e, find it in the n nodes before  p
-    //return the first element encounter, if any, otherwise return nullptr.
+    // ordered, o(n), no  promote  because of call by position
+    // find the last element that <= e, return left border if failed to find.
+    Posi(T) search(T const& e, int n , Posi(T));
+    
+    // For unordered list.
+    // Given the element e, find it in the n nodes before  p
+    // return the first element encounter, if any, otherwise return nullptr.
     int deduplicate();
 
-    void uniquify();
-
-    void traverse();
+    int uniquify();
     
-    //operator
-    T& operator[](Rank r) const;//O(n), don't use
+    // unordered list
+    void traverse(void (*visit ) (T& ));// function pointer
+    template <typename VST>
+    void traverse(VST& vist);// function object
+    
+    // sort algorithm for list
+    // selection sort algorithm <bubble sort>
+    void selectionSort(Posi(T), int n);
+
+
+    // operator
+    T& operator[](Rank r) const;// O(n), don't use
 };
 
 //implementation
@@ -150,6 +160,91 @@ int LList<T>::deduplicate()
         q ? remove(q) : r++;//if find, delete q,  not p, because p = p->succ.
     return oldSize - _size;
 }
+
+template <typename T>
+int LList<T>::uniquify()
+{
+    if(_size < 2)
+        return 0;
+    int oldSize = _size;
+    Posi(T) p = first()->succ;
+    while(p != trailer)
+    {
+        if(p->data == p->pred->data)
+        {
+            remove(p->pred);
+        }
+        p = p->succ;
+    } 
+    return oldSize - _size;
+}
+/* {
+    if(_size < 2)
+        return 0;
+    int oldSize = _size;
+    Posi(T) p = first();
+    Posi(T) q = nullptr;
+    while((q = p->succ) != trailer)
+    {
+        if(p->data == q->data)
+            remove(q);
+        else
+            p = q;
+    }
+    return oldSize - _size;
+} */
+
+template <typename T>
+void LList<T>::traverse(void (*visit ) (T& ))
+{
+    Posi(T) p = header;
+    while((p = p->succ) != trailer)
+    {
+        visit(p->data);
+    }
+}
+
+template <typename T> template <typename VST>
+void LList<T>::traverse(VST& vist)
+{
+    Posi(T) p = header;
+    while((p = p->succ) != trailer)
+    {
+        visit(p->data);
+    }
+}
+
+template <typename T> 
+Posi(T) LList<T>::search(T const& e, int n , Posi(T) p)
+{
+    /* do 
+    {
+        p = p->pred;
+        n--;
+    }
+    while((-1 < n) && (e<p->data)); */
+    while(0 <= n--)
+    {
+        if( ( (p = p->pred) ->data) <= e) break;
+    }
+    return p;
+}
+
+template <typename T>
+void LList<T>::selectionSort(Posi(T) p, int n )
+{
+    Posi(T) head = p->pred;
+    Posi(T) tail = p;
+    for(int i  = 0; i < n; i++) tail = tail->succ;
+    while(1 < n)
+    {
+        insertB(tail, remove(selectMax(head->succ, n)));// 3-14,
+                                                        // new and delete is too expensive, 100 times.
+        tail = tail->pred;
+        n--;
+    }
+}
+
 //**********************************************
 template <typename T>
 T& LList<T>::operator[](Rank r ) const

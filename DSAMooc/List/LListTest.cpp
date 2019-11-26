@@ -9,10 +9,12 @@ int main()
     for(int i= 0; i < 10; ++i)
     {
         l.insertA(l.last(), i*3+5);
+        if(i == 1)
+            l.insertA(l.last(), 8);
     }
 
     l.insertA(l.last(), 23);
-    int num = l.deduplicate();
+    int num = l.uniquify();
     std::cout << "Duplicate : " << num << std::endl;
 
     int i = 0;
