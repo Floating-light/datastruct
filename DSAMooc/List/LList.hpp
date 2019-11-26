@@ -64,7 +64,7 @@ public: // constructor and interface
     // sort algorithm for list
     // selection sort algorithm <bubble sort>
     void selectionSort(Posi(T), int n);
-
+    Posi(T) selectMax(Posi(T), int ); // painter's alg0rithm
 
     // operator
     T& operator[](Rank r) const;// O(n), don't use
@@ -231,18 +231,32 @@ Posi(T) LList<T>::search(T const& e, int n , Posi(T) p)
 }
 
 template <typename T>
-void LList<T>::selectionSort(Posi(T) p, int n )
+void LList<T>::selectionSort(Posi(T) p, int n )// o(n^2), big reduce on move operation, almost spend on compare operation
 {
     Posi(T) head = p->pred;
     Posi(T) tail = p;
     for(int i  = 0; i < n; i++) tail = tail->succ;
     while(1 < n)
     {
-        insertB(tail, remove(selectMax(head->succ, n)));// 3-14,
+        //if(tail->pred != selectMax(head->succ, n)) // if max node exactly before tail, this exchange is not nesserary.
+                                                     // but this is not a optimization, normally this case is rare encounter.
+        insertB(tail, remove(selectMax(head->succ, n)));// 3-14
                                                         // new and delete is too expensive, 100 times.
+                                                        
         tail = tail->pred;
         n--;
     }
+}
+
+template <typename T>
+Posi(T) LList<T>::selectMax(Posi(T) p , int n)
+{
+    Posi(T) max = p;
+    if( !lt((p = p->succ)-> data, max->data))// >=, how about >
+    {
+        max = p;
+    }
+    return max;
 }
 
 //**********************************************

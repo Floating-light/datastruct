@@ -85,7 +85,7 @@ public:
 
     Rank fibSearch(T* A, T const& e, Rank low, Rank high);
     
-    void bubbleSort(Rank low, Rank high);
+    void bubbleSort(Rank low, Rank high);//o(n^2)
     bool bubble(Rank low, Rank high);
 };
 /*
