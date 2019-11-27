@@ -65,7 +65,14 @@ public: // constructor and interface
     // selection sort algorithm <bubble sort>
     void selectionSort(Posi(T), int n);
     Posi(T) selectMax(Posi(T), int ); // painter's alg0rithm
-
+    
+    // insertion sort algorithm, o(n) -- o(n^2)
+    // how about using vector strcut?
+    void insertionSort(Posi(T),int);//in-place algorithm
+    //total inversion number == compare times, input-sensitive
+    
+    void mergeSort(Posi(T)& p, int n);
+    void merge(Posi(T)& p, int n, LList<T>& L, Posi(T) q, int m);
     // operator
     T& operator[](Rank r) const;// O(n), don't use
 };
@@ -257,6 +264,49 @@ Posi(T) LList<T>::selectMax(Posi(T) p , int n)
         max = p;
     }
     return max;
+}
+
+template <typename T>
+void LList<T>::insertionSort(Posi(T) p, int n)//inplace algorithm
+{
+    for(int i = 0; i < n; ++i)
+    {
+        insertA(search(p->data, i, p), p->data);
+        p=p->succ;
+        remove(p->pred);
+    }
+}
+
+template <typename T>
+void LList<T>::mergeSort(Posi(T)& p, int n)
+{
+    if ( n < 2) return ;
+    Posi(T) q = p;
+    int m = n >> 1;
+    for(int i = 0; i < m; ++m) q = q->succ;
+    mergeSort(p, m);
+    mergeSort(q, n - m);
+    merge(p, m, *this, q, n - m);
+
+}
+
+template <typename T>
+void LList<T>::merge(Posi(T)& p, int n, LList<T>& L, Posi(T) q, int m)
+{
+    Posi(T) pp = p->pred;
+    while( 0 < m)
+    {
+        if(0 < n && p->data < q->data)
+        {
+            if(q == (p = p->succ) ) break;
+            --n;
+        }
+        else
+        {
+            insertB(p, L.remove((q = q->succ)->pred);
+            m--;
+        }
+    }
 }
 
 //**********************************************
