@@ -48,7 +48,8 @@ ListNode* deleteDuplicatesV2(ListNode* head)
         {
             if(p->next == p1)
                 p = p1;
-            p->next = p1->next;   
+            else
+                p->next = p1->next;   
         }
         p1 = p1->next;
     }
