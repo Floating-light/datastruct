@@ -5,6 +5,7 @@ class Folder;
 class Message 
 {
     friend class Folder;
+    friend void swap(Message& l, Message& r);
 public:
     // Folders is implicitly initialized to the empty set
     explicit Message(const std::string& str = ""):// because of default argument, it is alse the Message default constructor.p290
@@ -21,7 +22,7 @@ private:
     std::string contents;
     std::set<Folder*> folders;
 
-    void add_to_Folder(const Message&);
+    void add_to_Folders(const Message&);
 
     void remove_from_Folders();
 };
