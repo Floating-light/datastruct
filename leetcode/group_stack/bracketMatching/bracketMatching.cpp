@@ -24,6 +24,55 @@ bool isValid(std::string s)
     return stk.empty();
 }
 
+bool isValidV2(std::string s)
+{
+    std::stack<char> stk;
+    for(int i = 0; i < s.size(); ++i)
+    {
+        switch(s[i])
+        {
+            case '(': 
+            case '{':
+            case '[':
+                stk.push(s[i]);
+                break;
+            case ')':
+                if(!stk.empty() && stk.top() == '(')
+                {
+                    stk.pop();
+                    break;
+                }
+                else
+                {
+                    return false;
+                }
+            case '}':
+                if(!stk.empty() && stk.top() == '{')
+                {
+                    stk.pop();
+                    break;
+                }
+                else
+                {
+                    return false;
+                }
+            case ']':
+                if(!stk.empty() && stk.top() == '[')
+                {
+                    stk.pop();
+                    break;
+                }
+                else
+                {
+                    return false;
+                } 
+            default:
+                break;
+                
+        }
+    }
+    return stk.empty();
+}
 int main()
 {
     std::unordered_map<char, char> backetsPair {{')','('}, {'}','{'}, {']','['} };
