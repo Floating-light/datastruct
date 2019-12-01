@@ -1,4 +1,5 @@
 #include <unordered_map>
+#include <vector>
 
 template <typename T>
 class LStack;
@@ -47,4 +48,8 @@ public:
     float calculate(float opndLeft, char optr, float opndRight);
 
     float evaluteRPN(const std::string& RPN);
+    
+    void NQueensV1(int N);
+    std::vector<std::vector<int>> NQueensV2(int N);
+    
 };
