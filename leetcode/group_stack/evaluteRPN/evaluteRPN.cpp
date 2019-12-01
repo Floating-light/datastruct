@@ -65,11 +65,11 @@ int evalRPNV2(vector<string>& tokens) {
         }
         else
         {
-            int operRight = stk.top();
+            const int operRight = stk.top();
             stk.pop();
-            int operLeft = stk.top();
+            const int operLeft = stk.top();
             stk.pop();
-            char opt = current[0];
+            const char opt = current[0];
             if(opt == '+')
                 stk.push(operLeft + operRight);
             else if(opt == '-')
@@ -94,11 +94,11 @@ int evalRPNV3(vector<string>& tokens) {
         }
         else
         {
-            int operRight = stk.top();
+            const int operRight = stk.top();
             stk.pop();
-            int operLeft = stk.top();
+            const int operLeft = stk.top();
             stk.pop();
-            char opt = current[0];
+            const char opt = current[0];
             if(opt == '+')
                 stk.push(operLeft + operRight);
             else if(opt == '-')
