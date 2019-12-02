@@ -63,21 +63,21 @@ void StackAlgorithm::NQueensV1(int N)
     
     Queen q(0, 0);
     int count = 1;
-    while( 0 < q.x || q.y < N)
+    while( 0 < q.x || q.y < N) // the first row is out of border, q.x == 0 && q.y == N.
     {
-        if(N <= solu.size() || N <= q.y)// back
+        if(N <= solu.size() || N <= q.y)// backtracking
         {
             q = *(solu.end() - 1);
             solu.pop_back();
-            q.y++;
+            q.y++; // turn to the next column of last row .
         }
-        else
+        else //probing
         {
-            while(q.y < N && std::find(solu.cbegin(), solu.cend(), q) != solu.cend())//try 
+            while(q.y < N && std::find(solu.cbegin(), solu.cend(), q) != solu.cend())//find int current row
             {
                 q.y++;
             }
-            if(q.y < N)
+            if(q.y < N) // if find turn to next row, otherwise will backtracking next.
             {
                 solu.push_back(q);
                 if(solu.size() == N)
