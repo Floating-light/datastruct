@@ -71,7 +71,7 @@ void StackAlgorithm::NQueensV1(int N)
             solu.pop_back();
             q.y++; // turn to the next column of last row .
         }
-        else //probing
+        else // probing
         {
             while(q.y < N && std::find(solu.cbegin(), solu.cend(), q) != solu.cend())//find int current row
             {

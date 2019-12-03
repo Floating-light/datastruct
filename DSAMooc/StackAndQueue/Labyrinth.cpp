@@ -1,6 +1,6 @@
 #include <vector>
 #include <iostream>
-
+#include <queue>
 typedef enum { AVAILABLE, ROUTE, BACKTBACKED, WALL} Status; // labyrinth cell status
 
 typedef enum { UNKNOWN, EAST, SOUTH, WEST, NORTH, NO_WAY } ESWN;
@@ -131,6 +131,7 @@ int main()
             laby[i][j].y = j;
         }
     }
+    srand(time(NULL)*10);
     for(int n = 0; n < 100; ++n)
     {
         laby[rand()%24][rand()%24].status = WALL;
@@ -138,6 +139,7 @@ int main()
     laby[1][1].status = AVAILABLE;
     laby[LABYRINTH_MAX - 2][LABYRINTH_MAX -2].status = AVAILABLE;
     printMap();
+    std::cout << "<<<------------------------------------------>>>" << std::endl;
     if(labyrinth(laby,&laby[1][1], &laby[LABYRINTH_MAX - 2][LABYRINTH_MAX -2]))
     {
         printMap();
@@ -146,4 +148,5 @@ int main()
     {
         std::cout << "no way" << std::endl;
     }
+
 }
