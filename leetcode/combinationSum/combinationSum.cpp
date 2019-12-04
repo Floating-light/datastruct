@@ -100,46 +100,53 @@ vector<vector<int>> combinationSumReal(vector<int>& candidates, int target)
 
 	return result;
 }
-
-void DFS(vector<int> &candidates, int currentSum, 
-const int& next, const int& target, vector<vector<int>> &result, vector<int>& path)
-{
-    if(currentSum == target)
+class Solution {
+    void DFS(const vector<int> &candidates, int currentSum, 
+        const int& next, const int& target, vector<vector<int>> &result, vector<int>& path)
     {
-        result.push_back(path);
-        return;
-    }
-    for ( int i = next; i < candidates.size(); ++i)
-    {
-        const int nextSum = candidates[i] + currentSum;
-        if(nextSum <= target)
+        if(currentSum == target)
         {
-            path.push_back(candidates[i]);
-            DFS(candidates, nextSum, next, target, result, path);
+            result.push_back(path);
+            return;
         }
-        else
+        for ( int i = next; i < candidates.size(); ++i)
         {
-            break;
+            const int nextSum = candidates[i] + currentSum;
+            if(nextSum <= target)
+            {
+                path.push_back(candidates[i]);
+                DFS(candidates, nextSum, i, target, result, path);
+                path.pop_back();
+            }
+            else
+            {
+                break;
+            }
         }
+            
     }
-        
-}
-
-vector<vector<int>> combinationSumRealDFS(vector<int>& candidates, int target)
-{
-    if(candidates.empty())
-    {
-        return vector<vector<int>>{};
+public:
+    vector<vector<int>> combinationSum(vector<int>& candidates, int target) {
+        if(candidates.empty())
+        {
+            return vector<vector<int>>{};
+        }
+        sort(candidates.begin(), candidates.end());
+        vector<vector<int>> result;
+        std::vector<int> path{};
+        DFS(candidates, 0,0,target,result,path);
+        return result;
     }
+};
 
-}
+
 
 int main() 
 {
     //vector<int> input = {1, 2,3,5,8,4,6,7,8,9,10};
-    //vector<int> input = {1, 2,3,5,8,4,6,7,8,9,10};
-    vector<int> input = {2,3,5};
-    vector<vector<int>> result = combinationSumReal(input, 8);
+    vector<int> input = {1, 2,3,5,8,4,6,7,8,9,10};
+    //vector<int> input = {};
+    vector<vector<int>> result = Solution().combinationSum(input, 12);
     for(int i = 0; i < result.size(); ++i)
     {
         std::cout << "result " << i+1 << ": ";
