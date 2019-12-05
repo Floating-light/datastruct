@@ -13,5 +13,12 @@ CopyControl:
 leetcode: 
 	g++ -g -o leetcode.exe ./leetcode/isMatch/isMatch.cpp
 	./leetcode.exe
+StrVec.o: ./primer/chapter13/5MgrDynamicMemory/StrVec.cpp \
+          ./primer/chapter13/5MgrDynamicMemory/StrVec.hpp
+	g++ -g -o StrVec.o -c ./primer/chapter13/5MgrDynamicMemory/StrVec.cpp
+main.o: ./primer/chapter13/5MgrDynamicMemory/main.cpp
+	g++ -g -o main.o -c ./primer/chapter13/5MgrDynamicMemory/main.cpp
+Dyn: StrVec.o main.o
+	g++ -o main.exe StrVec.o main.o
 clean: 
 	rm *.exe *.o 
