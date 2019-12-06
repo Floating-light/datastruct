@@ -44,4 +44,25 @@ template <typename T> struct BinNode
     bool operator==( BinNode const& bn ) { return data == bn.data; }
 };
 
+template <typename T>
+BinNodePosi(T) BinNode<T>::insertAsLeftChild(T const & e ) // assum lChild == nullptr
+{
+    return lChild = new BinNode<T>(e, this);
+}
+
+template <typename T>
+BinNodePosi(T) BinNode<T>::insertAsRightChild(T const & e ) // assum rChild == nullptr
+{
+    return rChild = new BinNode<T>(e, this);
+}
+
+template <typename T>
+int BinNode<T>::size()
+{
+    int s = 1;
+    if ( lChild ) s += lChild->size();
+    if ( rChild ) s += rChild->size();
+    return s;
+} // O(n) = |size|
+
 #endif

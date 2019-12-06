@@ -10,9 +10,6 @@ test: LVector.hpp LVectorTest.cpp
 CopyControl:
 	g++ -g -o copycontrol.exe ./primer/chapter13/CopyControl/copycontrol.cpp
 	./copycontrol.exe
-leetcode: 
-	g++ -g -o leetcode.exe ./leetcode/isMatch/isMatch.cpp
-	./leetcode.exe
 StrVec.o: ./primer/chapter13/5MgrDynamicMemory/StrVec.cpp \
           ./primer/chapter13/5MgrDynamicMemory/StrVec.hpp
 	g++ -g -o StrVec.o -c ./primer/chapter13/5MgrDynamicMemory/StrVec.cpp
@@ -20,5 +17,9 @@ main.o: ./primer/chapter13/5MgrDynamicMemory/main.cpp
 	g++ -g -o main.o -c ./primer/chapter13/5MgrDynamicMemory/main.cpp
 Dyn: StrVec.o main.o
 	g++ -o main.exe StrVec.o main.o
+#data struct 
+#leet code
+leetcodeMain: 
+	g++ -g ./leetcode/group_stack/simplifyPath/simplifyPath.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
