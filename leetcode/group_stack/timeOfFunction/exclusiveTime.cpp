@@ -69,12 +69,48 @@ public:
         }
         return result;
     }
+    vector<int> exclusiveTimeV2(int n, vector<string>& logs) {
+        vector<int> result(n,0);
+        vector<string>::const_iterator itr = logs.cbegin();
+        const vector<string>::const_iterator end = logs.cend();
+
+        stack<Item> stk;
+        stringstream in;
+        string temp;
+        const char splitor = ':';
+        while(itr != end)
+        {
+            Item cur;
+            in.clear();
+            in << *itr;
+            getline(in, temp, splitor);
+            cur.id = atoi(temp.c_str());
+            getline(in, temp, splitor);
+            cur.isStart = (temp == "start");
+            getline(in, temp, splitor);
+            cur.time = atoi(temp.c_str());
+            
+            if(cur.isStart)
+            {
+                stk.push(cur);
+            }
+            else
+            {
+                const int dur = cur.time - stk.top().time +1;
+                result[cur.id] += dur;
+                stk.pop();
+                stk.top().time -= dur;
+            }
+            ++itr;
+        }
+        return result;
+    }
 };
 
 int main() 
 {
     string t = "12:start:666";
-    vector<string> input{
+    /* vector<string> input{
         "0:start:0", // 2
         "1:start:2",
         "1:end:5", // 4
@@ -84,8 +120,11 @@ int main()
         "2:end:15", // 2
         "0:start:18",
         "0:end:20", // 5
-        "0:end:22"}; // 2
-    vector<int> result = Solution().exclusiveTime(3, input);
+        "0:end:22"}; // 2 */
+    vector<string> input = {
+        "0:start:0","1:start:2","1:end:5","0:end:6"
+    };
+    vector<int> result = Solution().exclusiveTime(2, input);
     for (int i = 0; i < result.size(); i++)
     {
         std::cout << "function " << i << " total execute time : " << result[i] << std::endl;
