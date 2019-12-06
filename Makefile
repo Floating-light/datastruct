@@ -20,6 +20,6 @@ Dyn: StrVec.o main.o
 #data struct 
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/group_stack/simplifyPath/simplifyPath.cpp -o main.exe
+	g++ -g ./leetcode/group_stack/timeOfFunction/exclusiveTime.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
