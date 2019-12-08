@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -45,13 +46,19 @@ int main()
 {
     string s("mississippi");
     string p("mis*is*p*.");
-
-    if(isMatch(s, p))
+    vector<pair<string, string>> inputs = {
+        {"aa", "a"},
+        {"aa", "a*"},
+        {"ab", ".*"},
+        {"aab", "c*a*b"},
+        {"mississippi", "mis*is*p*."},
+    };
+    for(int i = 0; i < inputs.size(); ++i )
     {
-        std::cout << "true" << std::endl;
-    }
-    else
-    {
-        std::cout << "false" << std::endl;
+        std::cout << "case "<< i << ":" << std::endl
+            << "s: "<< inputs[i].first << std::endl
+            << "p: "<< inputs[i].second << std::endl
+            << "is match: " << isMatch(inputs[i].first,inputs[i].second)
+            << std::endl << std::endl;
     }
 }

@@ -51,6 +51,7 @@ BinNodePosi(T) BinTree<T>::insertAsRightChild(BinNodePosi(T) x, T const& e)
     updateHeight(x);
     return x->rChild;
 }
+
 template <typename T>
 BinNodePosi(T) BinTree<T>::insertAsLeftChild(BinNodePosi(T) x, T const& e)
 {
