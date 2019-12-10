@@ -4,9 +4,13 @@
 
 int main() 
 {
-    StrVec v;
-    v.push_back("elemet6");
-    
-    std::cout << "test" << std::endl;
-    std::cout << *(v.end()-1) << std::endl;
+    StrVec v = {"test", "test2", "test3"};
+    std::string* b = v.begin();
+    std::cout << v.size() << "<<----\n";
+    while(b != v.end())
+    {
+        std::cout << *b << ", " ;
+        ++b;
+    }
+    std::cout << std::endl;
 }

@@ -101,3 +101,18 @@ void StrVec::chk_n_alloc()
         reallocate();
     }
 }
+
+StrVec& StrVec::operator=(StrVec &&rhs) noexcept
+{
+    // direct test for self-assignment
+    if ( this != &rhs)// rhs may be the result of calling move
+    {
+        free();
+        elements = rhs.elements;
+        first_free = rhs.first_free;
+        cap = rhs.cap;
+        // leave rhs in a destructible state
+        rhs.elements = rhs.first_free = rhs.cap = nullptr;
+    }
+    return *this;
+}

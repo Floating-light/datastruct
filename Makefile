@@ -15,11 +15,13 @@ StrVec.o: ./primer/chapter13/5MgrDynamicMemory/StrVec.cpp \
 	g++ -g -o StrVec.o -c ./primer/chapter13/5MgrDynamicMemory/StrVec.cpp
 main.o: ./primer/chapter13/5MgrDynamicMemory/main.cpp
 	g++ -g -o main.o -c ./primer/chapter13/5MgrDynamicMemory/main.cpp
-Dyn: StrVec.o main.o
-	g++ -o main.exe StrVec.o main.o
+RvalueReferences.o: ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
+	g++ -g -o RvalueReferences.o -c ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
+primer: RvalueReferences.o
+	g++ -o main.exe RvalueReferences.o
 #data struct 
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/group_stack/timeOfFunction/exclusiveTime.cpp -o main.exe
+	g++ -g ./leetcode/group_stack/TrappingRainWater/trap.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
