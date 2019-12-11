@@ -27,6 +27,11 @@ Message::Message(const Message& message):
     add_to_Folders(message); // add this message to the Folders that point to message
 }
 
+Message::Message(Message&& m)
+{
+    move_Folders(&m); // move folders and updates the Folder pointers
+}
+
 Message::~Message()
 {
     remove_from_Folders();
@@ -67,4 +72,27 @@ Message& Message::operator=(const Message& m)
     add_to_Folders(m);
     return *this;
 }
+
+Message& Message::operator=(Message && rhs)
+{
+    if(this != &rhs) // direct check for self-assignment
+    {
+        remove_from_Folders();
+        contents = std::move(rhs.contents); // move assignment
+        move_Folders(&rhs); // reset the Folders to point to this Message
+    }
+    return *this;
+}
+
+void Message::move_Folders(Message* m)
+{
+    folders = std::move(m->folders);
+    for( auto f: folders)
+    {
+        f->remMsg(m);
+        f->addMsg(this);
+    }
+    m->folders.clear();
+}
+
 

@@ -101,7 +101,7 @@ std::vector<std::vector<int>> StackAlgorithm::NQueensV2(int N)
 {
 
 }
-
+//1000*12131+123412(234+12312)
 float StackAlgorithm::evalute(char* s, std::string& RPN)
 {
     std::stack<char> optr;

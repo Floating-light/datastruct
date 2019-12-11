@@ -1,7 +1,8 @@
 #include <iostream>
+#include <vector>
 
 #include "StrVec.hpp"
-
+using namespace std;
 int main() 
 {
     StrVec v = {"test", "test2", "test3"};
@@ -12,5 +13,6 @@ int main()
         std::cout << *b << ", " ;
         ++b;
     }
+
     std::cout << std::endl;
 }

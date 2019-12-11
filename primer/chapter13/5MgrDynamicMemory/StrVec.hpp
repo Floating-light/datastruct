@@ -39,6 +39,7 @@ public:
 
     ~StrVec(); // destructor
     void push_back(const std::string&); // copy the element
+    void push_back(std::string&&); // copy the element
     size_t size() const { return first_free - elements; }
     size_t capacity() const { return cap - elements; }
     std::string* begin() const { return elements; }
@@ -56,6 +57,8 @@ private:
     // move constructors "moving" resources from the given object to the object being cosntructed.
     // for string, copy the char array pointer.
     void reallocate(); // get more space and copy the existing elements.
+    void reallocateV2(); // get more space and copy the existing elements.
+                         // using move iterator
 
     std::string *elements; // pointer to the first element in the array
     std::string *first_free; // pointer to the first free element in the array

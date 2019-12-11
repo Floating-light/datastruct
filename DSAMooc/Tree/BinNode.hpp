@@ -38,7 +38,7 @@ template <typename T> struct BinNode
     //insert new data as the right child of current node
     BinNodePosi(T) insertAsRightChild(const T& );
 
-    //get the direct succfix of current node
+    //get the direct succeed of current node, in inorder traversal
     BinNodePosi(T) succ();
 
     template <typename VST> void travLevel( VST& );
@@ -60,6 +60,9 @@ template <typename T> struct BinNode
 
     template <typename VST>
     void travInIteration( BinNodePosi(T) x, VST& vist);
+
+    template <typename VST>
+    void travInIteratin2( BinNodePosi(T) x, VST& vist);
 
     template <typename VST>
     void travLevelRecursion( BinNodePosi(T) x, VST& vist);
@@ -173,6 +176,32 @@ void BinNode<T>::travInIteration( BinNodePosi(T) x, VST& vist)
 }
 
 template <typename T> template <typename VST>
+void BinNode<T>::travInIteratin2( BinNodePosi(T) x, VST& vist)
+{
+    bool backtrack = false;
+    while( true )
+    {
+        if( !backtrack && x->lChild) // deep trav left sub tree.
+            x = x->lChild;
+        else // backtrack status
+        {
+            visit(x->data);
+            if( x->rChild)
+            {
+                x = x->rChild;
+                backtrack = false;
+            }
+            else
+            {
+                if( !(x = x->succ())) break;
+                backtrack = true;
+            }
+            
+        }
+    }
+}
+
+template <typename T> template <typename VST>
 void BinNode<T>::travLevelRecursion( BinNodePosi(T) x, VST& vist)
 {
     std::queue<BinNodePosi(T)> q;
@@ -188,5 +217,22 @@ void BinNode<T>::travLevelRecursion( BinNodePosi(T) x, VST& vist)
         if(cur->rChild)
             q.push(cur->rChild);
     }
+}
+
+template <typename T>
+BinNodePosi(T) BinNode<T>::succ()
+{
+    BinNode<T>* cur = this;
+    if( rChild) // has right child
+    {
+        s = rChild;
+        while(s->lChild) s = s->lChild;
+    }
+    else // no right child, "将当前节点包含于其左子树的最低祖先"
+    {
+        while( s->parent && (s->prent->rChild == s)) s = s->parent;
+        s = s->prent;
+    }
+    return s; // s maybe null, that is current node has not direct succeed.
 }
 #endif

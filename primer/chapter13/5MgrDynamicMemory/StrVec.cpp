@@ -47,6 +47,26 @@ void StrVec::reallocate()
     cap = elements + newcapacity;
 }
 
+// uninitialized_copy calls construct on each element in the input sequence
+// to “copy” that element into the destination. That algorithm uses the iterator dereference
+// operator to fetch elements from the input sequence. Because we passed
+// move iterators, the dereference operator yields an rvalue reference, which means
+// construct will use the move constructor to construct the elements.
+void StrVec::reallocateV2()
+{
+    size_t newcapacity = size() ? 2*size() : 1;
+    string* first = alloc.allocate(newcapacity);
+
+    // move the elements
+    string* last = uninitialized_copy(make_move_iterator(begin()), 
+                                        make_move_iterator(end()),
+                                        first);
+    free();
+    elements = first;
+    first_free = last;
+    cap = elements + newcapacity;
+}
+
 void StrVec::push_back(const string& s)
 {
     chk_n_alloc(); // ensure that there is room for another element
@@ -57,6 +77,12 @@ void StrVec::push_back(const string& s)
     // by a call to allocate.
     // remaining arguments determine which cosntructor to use to construct
     // the object
+}
+
+void StrVec::push_back(string&& s)
+{
+    chk_n_alloc();
+    alloc.construct(first_free++, std::move(s));
 }
 
 pair<string*, string*> StrVec::alloc_n_copy(const string* b, const string* e)

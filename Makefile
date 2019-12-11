@@ -20,8 +20,10 @@ RvalueReferences.o: ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
 primer: RvalueReferences.o
 	g++ -o main.exe RvalueReferences.o
 #data struct 
+mooc: 
+	g++ -g ./DSAMooc/StackAndQueue/StackAlgorithm1.cpp -o main.exe
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/group_stack/TrappingRainWater/trap.cpp -o main.exe
+	g++ -g ./leetcode/group_stack/PostorderTrav/postorderTraversal.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
