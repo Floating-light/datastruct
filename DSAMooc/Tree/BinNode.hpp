@@ -67,6 +67,8 @@ template <typename T> struct BinNode
     template <typename VST>
     void travLevelRecursion( BinNodePosi(T) x, VST& vist);
 
+    template <typename VST>
+    void travPost( BinNodePosi(T)x, VST& visit);
     bool operator< (BinNode cosnt& bn ) { return data < bn.data ; }
     bool operator==( BinNode const& bn ) { return data == bn.data; }
 };
@@ -216,6 +218,39 @@ void BinNode<T>::travLevelRecursion( BinNodePosi(T) x, VST& vist)
             q.push(cur->lChild);
         if(cur->rChild)
             q.push(cur->rChild);
+    }
+}
+
+template <typename T> template <typename VST>
+void BinNode<T>::travPost( BinNodePosi(T)x, VST& visit)
+{
+    std::stack<BinNodePosi(T)> stk;
+    BinNodePosi(T) preVisited = nullptr;
+    BinNodePosi(T) cur = root;
+    while( cur || !stk.empty() )
+    {
+        if( cur )
+        {
+            stk.push(cur);
+            cur = cur->left;
+        }
+        else
+        {
+            cur = stk.top();
+            if(cur->right && cur->right != preVisited)
+            {
+                stk.push(cur->right);
+                cur = cur->right->left;
+            }
+            else
+           {
+               visit(cur->data);
+                preVisited = cur;
+                stk.pop();
+                cur = nullptr;
+           }
+        
+        }
     }
 }
 
