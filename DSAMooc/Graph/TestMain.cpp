@@ -20,8 +20,8 @@ int main()
     }
 
     int edge = gm.remove(2, 3);
+    
     std::cout << "remove edge : " << edge << std::endl;
-
         for( int i = 0; i < gm.n; ++i)
     {
         const int out = gm.outDegree(i);

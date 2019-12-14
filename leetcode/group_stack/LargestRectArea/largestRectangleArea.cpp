@@ -11,7 +11,6 @@ public:
 
         int maxRect= 0;
         stack<int> SR;
-        SR.push(0);
         const int size = heights.size();
         for(int t = 0; t < size; ++t)
         {
@@ -22,7 +21,7 @@ public:
                 const int s = SR.empty() ? 0 : SR.top() + 1;
                 maxRect = max(maxRect, heights[r]*(t-s));
             }
-            if(t < size) SR.push(t);
+            SR.push(t);
         }
         return maxRect;
     }
