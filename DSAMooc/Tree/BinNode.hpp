@@ -243,12 +243,12 @@ void BinNode<T>::travPost( BinNodePosi(T)x, VST& visit)
                 cur = cur->right->left;
             }
             else
-           {
-               visit(cur->data);
+            {
+                visit(cur->data);
                 preVisited = cur;
                 stk.pop();
                 cur = nullptr;
-           }
+            }
         
         }
     }

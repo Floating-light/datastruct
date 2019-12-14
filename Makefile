@@ -21,7 +21,7 @@ primer: RvalueReferences.o
 	g++ -o main.exe RvalueReferences.o
 #data struct 
 mooc: 
-	g++ -g ./DSAMooc/StackAndQueue/StackAlgorithm1.cpp -o main.exe
+	g++ -g ./DSAMooc/Graph/TestMain.cpp -o main.exe
 #leet code
 leetcodeMain: 
 	g++ -g ./leetcode/group_stack/PostorderTrav/postorderTraversal.cpp -o main.exe
