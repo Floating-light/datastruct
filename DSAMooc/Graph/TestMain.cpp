@@ -2,13 +2,15 @@
 #include <iostream>
 #include <vector>
 
-#include "GraphMatrix.hpp"
+//#include "GraphMatrix.hpp"
+
+#include "GraphList.hpp"
 
 using namespace std;
 
 int main() 
 {
-    GraphMatrix<std::string, int> gm = {"A", "B", "C", "D"};
+    GraphList<std::string, int> gm = {"A", "B", "C", "D"};
     
     for( int i = 0; i < gm.n; ++i)
     {

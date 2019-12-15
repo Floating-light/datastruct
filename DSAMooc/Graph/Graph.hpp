@@ -2,7 +2,7 @@
 #include <limits>
 
 typedef enum { UNDISCOVERED, DISCOVERED, VISITED } VStatus; // The status of vertex
-typedef enum { UNDETERMINED, TREE, CROSS, FORWARD, BACKWARD } EType; // The type of edges int traversal
+typedef enum { UNDETERMINED, TREE, CROSS, FORWARD, BACKWARD } EStatus; // The type of edges int traversal
 
 template <typename Tv, typename Te> // the type of vertex and edge.
 class Graph
@@ -50,7 +50,7 @@ public:
     virtual void insert( const Te & , int, int, int) = 0; // insert a edge e with weight w between u and v
     virtual Te remove( int, int) = 0; // remove edge e between u and v
     // the type of edge (u,v);
-    virtual EType& type( int, int) = 0; 
+    virtual EStatus& type( int, int) = 0; 
     virtual Te& edge( int, int) = 0; // the data of edge (u,v)
     virtual int& weight(int , int ) = 0; // weight of edge (u,v)
 

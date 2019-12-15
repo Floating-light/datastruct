@@ -27,7 +27,7 @@ struct Edge
 {
     Te data;
     int weight;
-    EType type;
+    EStatus type;
     Edge( Te const& d, int w):
         data(d), weight(w), type( UNDETERMINED)
     {
@@ -128,14 +128,14 @@ public:
         }
         return vBak;
     }
-
+    // O(1)
     virtual bool exists( int i, int j)
     {
         return (0 <= i) && (i < Graph<Tv, Te>::n) && (0 <= j) && ( j < Graph<Tv, Te>::n ) && E[i][j] != nullptr;
     }
 
     // the base operation of edge
-    virtual EType& type( int i, int j) { return E[i][j]->type; }
+    virtual EStatus& type( int i, int j) { return E[i][j]->type; }
 
     virtual Te& edge( int i, int j) { return E[i][j]->data; }
 
