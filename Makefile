@@ -24,6 +24,6 @@ mooc:
 	g++ -g ./DSAMooc/Graph/TestMain.cpp -o main.exe
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/group_stack/MaximalRectangle/MaximalRectangle.cpp -o main.exe
+	g++ -g ./leetcode/GroupAnagrams/groupAnagrams.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
