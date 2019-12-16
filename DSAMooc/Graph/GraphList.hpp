@@ -96,9 +96,12 @@ public:
             {
                 if(cur->nextEdge)
                     j = cur->nextEdge->endVertex;
+                else
+                    j = -1;
+                    
                 break;
             }   
-            cur->nextEdge; 
+            cur = cur->nextEdge; 
         }
         return j;
     }

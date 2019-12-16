@@ -32,4 +32,6 @@ int main()
             << "outDegree : " << out << "\n"
             << "inDegree : " << in << std::endl; 
     }
+    std::cout<< std::endl;
+    gm.bfs(3);
 }

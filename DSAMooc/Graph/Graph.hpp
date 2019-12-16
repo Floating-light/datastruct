@@ -1,4 +1,5 @@
 #include <stack>
+#include <queue>
 #include <limits>
 
 typedef enum { UNDISCOVERED, DISCOVERED, VISITED } VStatus; // The status of vertex
@@ -23,7 +24,35 @@ private:
         }
     }
 
-    void BFS( int, int& );
+    void BFS( int v, int& clock)
+    {
+        std::queue<int> q;
+        status(v) = DISCOVERED;
+        q.push(v);
+        while(!q.empty())
+        {
+            v = q.front();
+            q.pop();
+            dTime(v) = ++clock;
+            for( int u = firstNbr(v); -1< u;u = nextNbr(v, u) )
+            {
+                if( status(u) == UNDISCOVERED)
+                {
+                    q.push(u);
+                    status(u) = DISCOVERED;
+                    type(v, u) = TREE;
+                    parent(u) = v;
+                }
+                else
+                {
+                    type(v, u) = CROSS;
+                }
+            }
+            std::cout << vertex(v) << "--->" << std::endl;
+            // visited operation
+            status(v) = VISITED; //
+        }
+    }
     void DFS( int, int& );
     void BCC( int, int&, std::stack<int>& ); // (连通域) 基于DFS的双连通分量分解算法
     bool TSort( int, int&, std::stack<Tv>* ); // (连通域) 基于DFS的拓扑排序算法
@@ -55,7 +84,19 @@ public:
     virtual int& weight(int , int ) = 0; // weight of edge (u,v)
 
 // algorithm
-    void bfs(int );
+    void bfs(int s)
+    {
+        reset();
+        int clock = 0;
+        int v = s;
+        do
+        {
+            if(status(v) == UNDISCOVERED)
+            {
+                BFS(v, clock);
+            }
+        }while( s!= ( v = (++v%n)));
+    }
     void dfs(int );
     void bcc(int ); // 基于DFS的双连通分量分解算法
     std::stack<Tv>* tSort( int); // 基于DFS的拓扑排序算法
