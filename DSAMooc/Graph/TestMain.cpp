@@ -33,5 +33,5 @@ int main()
             << "inDegree : " << in << std::endl; 
     }
     std::cout<< std::endl;
-    gm.bfs(3);
+    gm.dfs(0);
 }

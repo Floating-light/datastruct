@@ -1,8 +1,10 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
-
+#include <set>
 using namespace std;
+
+// from [1, 2, 3], let ervery element be the first, and exchange remaining elements.
 class Solution {
     vector<vector<int>> res;
     vector<int> numbers;
@@ -28,11 +30,12 @@ class Solution {
             res.push_back( numbers);
             return ;
         }
-
+        set<int> s;
         for(int i = n ; i<numbers.size() ; ++i)
         {
-            if( i != n && numbers[i] == numbers[n] )
+            if( s.find(numbers[i]) != s.end() )
                 continue;
+            s.insert(numbers[i] );
             swap(numbers[i], numbers[n]);
             permutationsUnique(n + 1);
             swap(numbers[n], numbers[i]);
