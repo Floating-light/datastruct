@@ -128,7 +128,8 @@ class Solution {
             
     }
     void DFS2(const vector<int> &candidates, int currentSum, 
-        const int& next, const int& target, vector<vector<int>> &result, vector<int>& path)
+        const int& next, const int& target, 
+        vector<vector<int>> &result, vector<int>& path)
     {
         if(currentSum == target)
         {
@@ -144,7 +145,7 @@ class Solution {
             if(nextSum <= target)
             {
                 path.push_back(candidates[i]);
-                DFS(candidates, nextSum, i+1, target, result, path);
+                DFS2(candidates, nextSum, i+1, target, result, path);
                 path.pop_back();
             }
             else
