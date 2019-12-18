@@ -53,7 +53,33 @@ private:
             status(v) = VISITED; //
         }
     }
-    void DFS( int, int& );
+    void DFS( int v, int& clock )
+    {
+        dTime(v) = ++clock;
+        status(v) = DISCOVERED;
+        std::cout << vertex(v) << " dTime: " << dTime(v) << std::endl;
+        for(int u = firstNbr(v); -1 < u; u = nextNbr(v , u))
+        {
+            if(status(u) == UNDISCOVERED)
+            {
+                type(v, u) = TREE;
+                parent(u) = v;
+                DFS(u, clock);
+            }
+            else if(status(u) == DISCOVERED)
+            {
+                type(v, u) =BACKWARD;
+            }
+            else // VISITED
+            {
+                type(v, u) = dTime(v) < dTime(u) ? FORWARD : CROSS;
+            }
+            
+        }
+        status(v) = VISITED;
+        fTime(v) = ++clock;
+        std::cout << vertex(v) << " fTime: " << fTime(v) << std::endl;
+    }
     void BCC( int, int&, std::stack<int>& ); // (连通域) 基于DFS的双连通分量分解算法
     bool TSort( int, int&, std::stack<Tv>* ); // (连通域) 基于DFS的拓扑排序算法
     template <typename PU> void PFS ( int, PU); // 优先级搜索框架
@@ -97,7 +123,19 @@ public:
             }
         }while( s!= ( v = (++v%n)));
     }
-    void dfs(int );
+    void dfs(int s)
+    {
+        reset();
+        int clock = 0;
+        int v = s;
+        do
+        {
+            if( status(v) == UNDISCOVERED)
+            {
+                DFS(v, clock);
+            }
+        }while( s!= (v = (++v%n)));
+    }
     void bcc(int ); // 基于DFS的双连通分量分解算法
     std::stack<Tv>* tSort( int); // 基于DFS的拓扑排序算法
     void prim( int); // 最小支撑树prim 算法
