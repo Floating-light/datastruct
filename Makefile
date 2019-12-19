@@ -17,13 +17,14 @@ main.o: ./primer/chapter13/5MgrDynamicMemory/main.cpp
 	g++ -g -o main.o -c ./primer/chapter13/5MgrDynamicMemory/main.cpp
 RvalueReferences.o: ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
 	g++ -g -o RvalueReferences.o -c ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
-primer:
-	g++ -g ./primer/chapter14/BasicConcepts.cpp -o main.exe
+primer: FORCE
+	g++ -g ./primer/chapter14/2outputInput.cpp -o main.exe
 #data struct 
 mooc: 
 	g++ -g ./DSAMooc/Graph/TestMain.cpp -o main.exe
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/combinationSum/combinationSum.cpp -o main.exe
+	g++ -g ./leetcode/MulitplyString/multiply.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
+FORCE:
