@@ -13,6 +13,7 @@ friend bool operator!=(const Test&, const Test&);
 private:
     int data;
     string name;
+    string* p;
 public:
     Test(int d = 10, const string s = "test string"): data(d), name(s){ }
     Test(initializer_list<int>& ini)
@@ -62,7 +63,21 @@ public:
     {
         return this->data;
     }
+    Test& operator++()
+    {
+        ++this->data;
+        return *this;
+    }
+    Test& operator++(int)
+    {
+        ++*this;
+        return *this;
+    }
 
+    string* operator->() const 
+    {
+        return p;
+    }
 };
 
 
@@ -109,5 +124,5 @@ int main()
 {
     Test t1{4367658};
     
-    cout <<t1;
+    cout <<t1 << std::endl << t1->size();
 }
