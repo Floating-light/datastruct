@@ -2,6 +2,7 @@
 #include <vector>
 #include <unordered_map>
 #include <iostream>
+#include <bitset>
 
 using namespace std;
 
@@ -62,14 +63,17 @@ public:
             {
                 if(board[i][j] =='.') continue;
                 const int& horiz = 1 << (board[i][j] - '0'); 
-                const int& mat = (i/3)*3 + j%3;
-                char s[256];
-                __itoa(column[j], s, 2);
-                printf("%s\n", s);
+                const int& mat = (i/3)*3 + j/3;
+
+                cout<<bitset<sizeof(int)*8>(horiz)<<endl; 
+                cout << mat << endl;
                 if(row& horiz ||
                     column[j]& horiz ||
                     matrix[mat]& horiz)
                 {
+                    cout<<bitset<sizeof(int)*8>(row)<<endl; 
+                    cout<<bitset<sizeof(int)*8>(column[j])<<endl; 
+                    cout<<bitset<sizeof(int)*8>(matrix[mat])<<endl; 
                     return false;
                 }  
                 row |= horiz;
@@ -109,7 +113,7 @@ int main()
         {'.','.','.','.','8','.','.','7','9'}
     };
 
-    vector<vector<char>> in3 = 
+    vector<vector<char>> in3 = // true
     {
         {'5','3','.','.','7','.','.','.','.'},
         {'6','.','.','1','9','5','.','.','.'},
@@ -122,6 +126,6 @@ int main()
         {'.','.','.','.','8','.','.','7','9'}
     };
 
-    std::cout << Solution().isValidSudoku2(input) << std::endl;
+    std::cout << Solution().isValidSudoku2(in3) << std::endl;
 
 }
