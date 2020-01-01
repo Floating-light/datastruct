@@ -23,12 +23,28 @@ class Solution {
 public:
     ListNode* reverseKGroup(ListNode* head, int k) 
     {
-        ListNode* l = nullptr;
-        ListNode* r = head;
+        ListNode* h = new ListNode(-1);
+        h->next = head;
+        ListNode* l = h;
+        ListNode* r = h;
         int count = 0;
-        while(r)
+        while(r->next)
         {
-            
+            ++count;
+            r=r->next;
+            if(count == k)
+            {
+                ListNode* templ = r->next;
+                r->next = nullptr;
+                ListNode* newhead = reverse(l->next);
+                l->next->next = templ;  
+                r = l->next;
+                l->next = newhead;
+                l = r;
+                count = 0;
+            }
         }
+        return h->next;
     }
+
 };

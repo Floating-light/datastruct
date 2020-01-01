@@ -64,7 +64,8 @@ public:
                 const int& horiz = 1 << (board[i][j] - '0'); 
                 const int& mat = (i/3)*3 + j%3;
                 char s[256];
-                __itoa(column[j], s, 2);
+            
+                //itoa(column[j], s, 2);
                 printf("%s\n", s);
                 if(row& horiz ||
                     column[j]& horiz ||
