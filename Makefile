@@ -18,13 +18,13 @@ main.o: ./primer/chapter13/5MgrDynamicMemory/main.cpp
 RvalueReferences.o: ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
 	g++ -g -o RvalueReferences.o -c ./primer/chapter13/6MovingObjects/RvalueReferences.cpp
 primer: FORCE
-	g++ -g ./primer/chapter14/8FunctionCallOperator.cpp -o main.exe
+	g++ -g ./primer/chapter14/overloadingConversion.cpp -o main.exe
 #data struct 
 mooc: 
 	g++ -g ./DSAMooc/Graph/TestMain.cpp -o main.exe
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/ValidSudoku/validSudoku.cpp -o main.exe
+	g++ -g ./leetcode/LongestValidParen/LongestValidParen.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
 FORCE:
