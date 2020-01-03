@@ -24,7 +24,7 @@ mooc:
 	g++ -g ./DSAMooc/Graph/TestMain.cpp -o main.exe
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/LongestValidParen/LongestValidParen.cpp -o main.exe
+	g++ -g ./leetcode/ConcatenationAllWords/concatenationAllWords.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
 FORCE:
