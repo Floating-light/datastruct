@@ -63,18 +63,11 @@ public:
             {
                 if(board[i][j] =='.') continue;
                 const int& horiz = 1 << (board[i][j] - '0'); 
-<<<<<<< HEAD
                 const int& mat = (i/3)*3 + j%3;
                 char s[256];
             
                 //itoa(column[j], s, 2);
                 printf("%s\n", s);
-=======
-                const int& mat = (i/3)*3 + j/3;
-
-                cout<<bitset<sizeof(int)*8>(horiz)<<endl; 
-                cout << mat << endl;
->>>>>>> 53ed4f8922ad28ea80479d6490b673c9daa362bd
                 if(row& horiz ||
                     column[j]& horiz ||
                     matrix[mat]& horiz)
