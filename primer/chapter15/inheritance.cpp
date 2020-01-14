@@ -41,10 +41,38 @@ private:
     double discount = 0.0;
 };
 
-class t : Bulk_quote
+class Limit_quote final : public Quote
 {
-
+    public:
+    Limit_quote() = default;
+    Limit_quote(const std::string& book, double sales_price, std::size_t qty, double disc) : 
+        Quote(book, sales_price), limits(qty), discount(disc) { }
+    /* virtual <optional>*/double net_price( std::size_t n) const override
+    {
+        if( n > limits)
+            return (n - limits) * (1 - discount) * price + n * price;
+        else
+            return n * price;
+    }
+private:
+    std::size_t limits = 0;
+    double discount = 0.0;
 };
+
+int main()
+{
+    Quote base;
+    Bulk_quote& bk = base;
+
+    Bulk_quote bulk;
+    
+    Quote ba(bulk); // call Quote::Quote(const Quote& )
+    base = bulk; //    call Quote::=(const Quote& )
+
+    Quote* bulkq = &bulk;
+    Bulk_quote* b = bulkq; // must use dynamic_cast<>   , check at run time
+                           // or use static_cast<> if we know this conversion is safe, to override the compiler.
+}
 
 double print_total(std::ostream &os, const Quote& item, std::size_t m)
 {
@@ -53,11 +81,3 @@ double print_total(std::ostream &os, const Quote& item, std::size_t m)
        << " # sold: " << m << " total due: " << ret << std::endl;
     return ret;
 }
-
-int main()
-{
-    Bulk_quote bq;
-    Quote* p = &bq;
-    Quote& r = bq; 
-}
- 
