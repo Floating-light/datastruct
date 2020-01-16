@@ -3,15 +3,16 @@ struct B
 {
     virtual void f1( int ) const;
     virtual void f2() ;
-    void f3();
+    virtual void f3();
 };
 
 struct D : B
 {
     void f1( int ) const override;
     void f2(int) override;
-    void f3() override;
-    void f4() override;
+    void f3() final; // final should only in the declaration of a virtual member function.
+                     // so there is unnecessary add a override.
+    void f4() final;
 };
 
 struct D1 : B
