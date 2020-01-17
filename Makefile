@@ -24,7 +24,7 @@ mooc:
 	g++ -g ./DSAMooc/Graph/TestMain.cpp -o main.exe
 #leet code
 leetcodeMain: 
-	g++ -g ./leetcode/Nqueens/Nqueens.cpp -o main.exe
+	g++ -g ./leetcode/JumpGame/jumpGame.cpp -o main.exe
 clean: 
 	rm *.exe *.o 
 FORCE:
