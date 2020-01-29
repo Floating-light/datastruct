@@ -12,7 +12,7 @@ public:
 
         int maxRect= 0;
         stack<int> SR;
-        SR.push(0);
+
         const int size = heights.size();
         for(int t = 0; t < size; ++t)
         {
@@ -24,6 +24,33 @@ public:
                 maxRect = max(maxRect, heights[r]*(t-s));
             }
             if(t < size) SR.push(t);
+        }
+        return maxRect;
+    }
+};
+
+class Solution2 {
+public:
+    
+    int largestRectangleArea(vector<int>& heights) {
+        heights.push_back(0);
+        int maxRect= 0;
+        stack<int> SR;
+
+        int k = 0;
+        while(k < heights.size())
+        {
+            if(SR.empty() || heights[SR.top()] <= heights[k])
+            {
+                SR.push(k);
+                ++k;
+            }
+            else
+            {
+                const int t = SR.top();
+                SR.pop();
+                maxRect = max(maxRect, heights[t]*(k- (SR.empty()?-1:SR.top()) -1 ));
+            }
         }
         return maxRect;
     }
