@@ -26,5 +26,5 @@ mooc:
 leetcodeMain: 
 	g++ -g ./leetcode/JumpGame/jumpGame.cpp -o main.exe
 clean: 
-	rm *.exe *.o 
+	find . -name "*.exe" -exec rm -rf {} \;
 FORCE:
