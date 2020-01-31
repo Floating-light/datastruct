@@ -4,14 +4,13 @@
 ### 1. 先排序
 * 先将输入集合的所有区间按起始元素的大小升序排列。
 * 迭代所有区间，判断当前区间i是否和前一区间pre相交，是则合并。
-```
-迭代时，使用一个变量pre保存已迭代过的最右边的有效位置，每次合并时，仅仅是更新这个位置，在无需合并时将当前区间移至该位置后，并更新pre.
-```  
+- 迭代时，使用一个变量pre保存已迭代过的最右边的有效位置，每次合并时，仅仅是更新这个位置，在无需合并时将当前区间移至该位置后，并更新pre.
+
 ```c++
 class Solution {
 public:
     vector<vector<int>> merge(vector<vector<int>>& intervals) {
-        if(intervals.size() >= 1) return intervals;
+        if(intervals.size() <= 1) return intervals;
         sort(intervals.begin(), intervals.end(),[](const vector<int>&l, const vector<int>&r)
         {
             return l[0] < r[0];
