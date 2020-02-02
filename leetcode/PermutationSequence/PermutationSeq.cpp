@@ -9,18 +9,12 @@ using namespace std;
 class Solution2 {
 public:
     string getPermutation(int n, int k) {
-        string s;
-        for(int i = 1; i <= n; ++i)
-        {
-            s.push_back('0' + i);
-        }
-        std::cout << "1. " << s << std::endl;
+        string s = "123456789";
+        s = s.substr(0,n);
         for(int j = 1; j < k; ++j)
         {
             next_permutation(s.begin(), s.end());
-            std::cout << j + 1 << ". " << s << std::endl;
         }      
-
         return s;
     }
 };
@@ -40,21 +34,17 @@ class Solution {
 public:
     string getPermutation(int n, int k) {
         string res;
-        string slist;
-        for(int i = 1; i <= n; ++i)
-        {
-            slist.push_back('0' + i);
-        }
+        string s = string("123456789").substr(0, n);
         --k;
         while(k > 0)
         {
-            size_t pos = k/fac[n - 1];
-            res.push_back(slist[pos]);
-            slist.erase(slist.begin() + pos);
+            size_t i = k/fac[n - 1];
+            res.push_back(s[i]);
+            s.erase(s.begin() + i);
             k %= fac[n - 1];
             --n;
         }
-        return res + slist;
+        return res + s;
     }
 };
 const vector<int> Solution::fac = {0,1,2,6,24,120,720,5040,40320,362880,3628800};
