@@ -9,26 +9,30 @@ class Solution {
 public:
     string removeKdigits(string num, int k) {
         if(num.size() == k) return string(1, '0');
-        string res;
+        string stk;
         int i = 0;
-        while(k > 0 && i < num.size())
+        while(k > 0 && i < num.size()) //将num中的字符按规则移动到栈中
         {
-            if(res.empty() || res.back() <= num[i]) 
+            if(stk.empty() || stk.back() <= num[i]) 
             {
-                res.push_back(num[i]);
+                stk.push_back(num[i]);
                 ++i;
             }    
-            else // res.back() > num[i]
+            else // stk.back() > num[i]
             {
-                res.pop_back();
+                stk.pop_back();
                 --k;
             }
         }
-        res = res.substr(0, res.size() - k) + num.substr(i);
+        // 1. 如果i == 0, 则 k 可能不等于0, 移除掉stk末尾k个元素.
+        // 2. 如果k == 0, 则 i 可能不等于0, 需要加上num中i之后的元素.
+        stk = stk.substr(0, stk.size() - k) + num.substr(i);
 
+        // 移除开头的0,在全0的情况下保证至少剩下一个0.
         size_t beginIndex = 0;
-        while(beginIndex < res.size() - 1 && res[beginIndex] == '0') ++beginIndex;
-        return res.substr(beginIndex);
+        while(beginIndex < stk.size() - 1 && stk[beginIndex] == '0') ++beginIndex;
+        
+        return stk.substr(beginIndex);
     }
 };
 
