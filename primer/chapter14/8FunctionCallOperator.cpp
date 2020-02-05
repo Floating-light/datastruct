@@ -16,6 +16,7 @@ public:
     {
         os << s << sep;
     }
+    int fff(int i, int j);
 private:
     ostream& os;
     char sep;
@@ -32,13 +33,16 @@ namespace func
             return denominator / divisor;
         }
     };
+    PrintString p;
     map<char, function<int(int, int)>> binops =
     {
         {'+', add},
         {'-', std::minus<int>()},
         {'/', divide()},
         {'*', [](int i, int j)->int{return i * j;} },
-        {'%', mod}
+        {'%', mod},
+        {']', p.fff}
+
     };
 }
 int main()
