@@ -103,7 +103,7 @@ double print_total(std::ostream &os, const Quote& item, std::size_t m)
     return ret;
 }
 
-int main()
+/* int main()
 {
     std::cout << "any error ? " << std::endl;
     Quote q1("121234256", 100);
@@ -113,4 +113,4 @@ int main()
     print_total(std::cout, bq1, 10);
     print_total(std::cout, lq1, 10);
 
-}
+} */
