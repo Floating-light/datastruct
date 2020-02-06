@@ -8,6 +8,13 @@ public:
     Quote() = default;
     Quote(const std::string& book, double sales_price) : 
         bookNo(book), price(sales_price) {}
+
+    // virtual function to return a dynamically allocated copy of itself
+    // these members use reference qualifiers; see 13.6.3(p. 546)
+    // 基于this 是左值还是右值而重载。
+    virtual Quote*clone() const & { return  new Quote(*this); }
+    virtual Quote* clone() && { return new Quote(std::move(*this));}
+
     std::string isbn() const
     {
         return bookNo;
@@ -35,6 +42,10 @@ public:
     Bulk_quote() = default;
     Bulk_quote(const std::string& book, double sales_price, std::size_t qty, double disc) : 
         Quote(book, sales_price), min_qty(qty), discount(disc) { }
+
+    virtual Bulk_quote* clone() const & { return  new Bulk_quote(*this); }
+    virtual Bulk_quote* clone() && { return new Bulk_quote(std::move(*this));}
+
     /* virtual <optional>*/double net_price( std::size_t n) const override
     {
         if( n > min_qty)
@@ -60,6 +71,10 @@ public:
     Limit_quote() = default;
     Limit_quote(const std::string& book, double sales_price, std::size_t qty, double disc) : 
         Quote(book, sales_price), limits(qty), discount(disc) { }
+
+    virtual Limit_quote* clone() const & { return  new Limit_quote(*this); }
+    virtual Limit_quote* clone() && { return new Limit_quote(std::move(*this));}
+
     /* virtual <optional>*/double net_price( std::size_t n) const override
     {
         if( n > limits)
