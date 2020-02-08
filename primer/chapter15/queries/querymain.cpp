@@ -10,7 +10,7 @@ using std::endl;
 
 #include <cstdlib>  // for EXIT_FAILURE
 
-#include "primer/chapter15/queries/TextQuery.h"
+#include "TextQuery.h"
 //#include "make_plural.h"
 
 void runQueries(ifstream &infile)
