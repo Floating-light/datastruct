@@ -27,4 +27,6 @@ leetcodeMain:
 	g++ -g ./leetcode/JumpGame/jumpGame.cpp -o main.exe
 clean: 
 	find . -name "*.exe" -exec rm -rf {} \;
+	find . -name "*.o" -exec rm -rf {} \;
+
 FORCE:
