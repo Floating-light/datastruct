@@ -19,7 +19,7 @@ class Solution {
     }
 public:
     string decodeString(string s) {
-        string opt;
+        string res;
         stack<int> times;
         for(auto itr = s.cbegin(); itr != s.cend();)
         {
@@ -30,25 +30,26 @@ public:
             }
             else if(*itr == ']') 
             {
+                // 题目保证前一定有数字[]
                 int curTimes = times.top();
                 times.pop();
 
-                const int ind = opt.find_last_of('[');
-                string temp = opt.substr(ind+1);
-                opt.erase(ind);
+                const int ind = res.find_last_of('[');
+                string temp = res.substr(ind+1);
+                res.erase(ind);
                 while(curTimes != 0) 
                 {
-                    opt += temp;
+                    res += temp;
                     --curTimes;
                 }
             }
             else
             {
-                opt.push_back(*itr);
+                res.push_back(*itr);
             }
             ++itr;
         }
-        return opt;
+        return res;
     }
 };
 
