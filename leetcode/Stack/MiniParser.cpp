@@ -59,7 +59,7 @@ class NestedInteger {
     const vector<NestedInteger> &getList() const{ return nest; }
 };
 
-// 20ms
+// 8ms beat 100%
 class Solution {
 public:
     NestedInteger deserialize(string s) {
@@ -73,7 +73,8 @@ public:
         {
             if((s[i] == ',' && !squr) || (i == s.size()-1)) 
             {
-                res.add(deserialize(s.substr(last, i-last)));
+                // 使用移动构造器很关键，直接从20+ms 到8ms
+                res.add(std::move(deserialize(s.substr(last, i-last))));
                 last = i+1;
             }
             else if(s[i] == '[') ++squr;
@@ -155,8 +156,68 @@ public:
     }
 };
 
+// 16ms < iterator==12ms
+class Solution12_index {
+    int readNum(const string& s, int& i)
+    {
+        const int begin = i;
+        while(isdigit(s[i]) || s[i] == '-')
+        {           
+            ++i;
+        }
+        return stoi(s.substr(begin, i - begin));
+    }
+public:
+    NestedInteger deserialize(string s) {
+        stack<int> stk;
+        vector<NestedInteger> res;
+        for(int i = 0; i < s.size();)
+        {
+            if(isdigit(s[i]) || s[i] == '-') 
+            {
+                res.push_back(std::move(NestedInteger(readNum(s, i))));
+                continue;
+            }
+            else if( s[i] == '[')
+            {
+                if(s[i+1] == ']') // 一对空的方括号
+                {
+                    res.push_back(NestedInteger());
+                    ++i;
+                }
+                else
+                {
+                    // 不是空的就至少有一个
+                    stk.push(1); // 这对方括号的元素个数
+                }
+            }
+            else if(s[i] == ',') // 多一个','后面就多一个元素
+            {
+                ++stk.top();
+            }
+            else // ']'
+            {
+                int curNiNum = stk.top();
+
+                NestedInteger realNest = NestedInteger();
+                while(curNiNum != 0)
+                {
+                    realNest.add(std::move(res[res.size() - curNiNum]));
+                    curNiNum--;
+                }
+                res.erase(res.end() - stk.top(), res.end());
+                res.push_back(std::move(realNest));
+
+                stk.pop(); // 元素个数
+            }   
+            ++i;
+        }
+        return res.back();
+    }
+};
+
 // 12ms beat 97.36%
-class Solution12 {
+class Solution12_itr {
     int readNum(string::iterator& itr)
     {
         string::iterator begin = itr;
@@ -369,6 +430,6 @@ int main()
     string input = "[123,456,[788,799,833],[[]],10,[]]";
 
     NestedInteger res;
-    res = Solution().deserialize(input);
+    res = Solution12_index().deserialize(input);
     int i = 0;
 }
