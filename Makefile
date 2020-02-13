@@ -25,6 +25,8 @@ mooc:
 #leet code
 leetcodeMain: 
 	g++ -g ./leetcode/JumpGame/jumpGame.cpp -o main.exe
+CSChallenge:
+	g++ -g CSChallengeCamp\week2\RecodingK.cpp -o main.exe
 clean: 
 	find . -name "*.exe" -exec rm -rf {} \;
 	find . -name "*.o" -exec rm -rf {} \;
