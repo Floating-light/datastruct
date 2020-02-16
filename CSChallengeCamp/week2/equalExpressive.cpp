@@ -64,13 +64,15 @@ class Solution
         }
     }
 
+    // 路径压缩
     int find(int a)
     {
-        while(s[a] != -1)
+        return s[a] == -1?a:s[a] = find(a);
+        /* while(s[a] != -1)
         {
             a = s[a];
         }
-        return a;
+        return a; */
     }
 
     void unionSet(int a, int b)
