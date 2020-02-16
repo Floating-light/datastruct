@@ -6,6 +6,38 @@
 
 using namespace std;
 
+/* 描述
+给定一个1到n的排列，按顺序依次插入到一棵二叉排序树中，请你将这棵二叉树前序遍历和后序遍历输出。
+
+前序遍历的定义
+
+后序遍历的定义
+
+输入
+第一行一个整数n。
+
+接下来一行表示为n个整数，代表1到n的一个排列。
+
+输出
+输出所建成的二叉树的前序遍历和后序遍历。
+
+输入样例
+10
+2 6 9 3 5 7 10 8 4 1
+输出样例
+2 1 6 3 5 4 9 7 8 10
+1 4 5 3 8 7 10 9 6 2
+限制
+对于50%的数据，1 ≤ n ≤ 100；
+
+对于100%的数据，1 ≤ n ≤ 100000。
+
+保证建成的树的高度不超过50。
+
+时间：2 sec
+
+空间：256 MB */
+
 #define InHeap(n, i) (-1 < i)&&(i < n)
 #define LChild
 #define Bigger(H,i,j) (max(H[i], H[j]) ? i: j)
@@ -52,10 +84,14 @@ public:
 struct Node
 {
     Node(int v  = -1 , int l = -1, int r = -1 ): val(v), lchild(l), rchild(r) { }
-    int val;
+    int val; // 可以不要
+             // 数组中的索引代表了值
     int lchild;
     int rchild;
 };
+
+// 保证建成的树的高度不超过50。
+// 不用考虑平衡
 
 class BinaryTree
 {
@@ -71,7 +107,6 @@ class BinaryTree
         {
             insert(input[i], root);
         }
-
         ppre(root);
         cout << endl;
         suffix(root);

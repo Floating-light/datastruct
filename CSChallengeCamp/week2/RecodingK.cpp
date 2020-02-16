@@ -49,24 +49,10 @@ class Solution
                 input.pop_back();
             }
             input.push_back(temp);
-            shortest += temp;
+            shortest += temp; // 累计长度
             push_heap(input.begin(), input.end(),std::greater<>());
         }
         return shortest;
-    }
-
-    void dfs(const Node& n, int deep)
-    {
-        ++deep;
-        if (n.children.empty()) 
-        {
-            shortest += n.val*deep;
-            return ;
-        }
-        for(auto& child : n.children)
-        {
-            dfs(child, deep);
-        }
     }
 };
 
