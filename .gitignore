@@ -4,3 +4,9 @@
 
 *.o
 
+Makefile
+
+*.vcxproj*
+
+DataStruct.cpp
+
