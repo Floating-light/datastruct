@@ -72,3 +72,34 @@ public:
 private:
 	//...
 };
+
+// 创建迷宫的类
+class MazeGame
+{
+public:
+	// 用一系列操作将构建加入到迷宫中
+	// 可以将room的四周初始化为墙以简化代码(但这不是问题本质)
+	// 这种办法对迷宫布局进行硬编码, 不够灵活
+	Maze* CreateMaze()
+	{
+		Maze* aMaze = new Maze;
+		Room* r1 = new Room(1);
+		Room* r2 = new Room(2);
+		Door* theDoor = new Door(r1, r2);
+
+		aMaze->AddRoom(r1);
+		aMaze->AddRoom(r2);
+
+		r1->SetSide(North, new Wall);
+		r1->SetSide(East, theDoor);
+		r1->SetSide(South, new Wall);
+		r1->SetSide(West, new Wall);
+
+		r2->SetSide(North, new Wall);
+		r2->SetSide(East, new Wall);
+		r2->SetSide(South, new Wall);
+		r2->SetSide(West, theDoor);
+
+		return aMaze;
+	}
+};
