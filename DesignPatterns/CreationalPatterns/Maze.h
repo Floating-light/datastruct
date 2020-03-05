@@ -36,6 +36,16 @@ private:
 	int _roomNumber;
 };
 
+class Spell;
+class EnchantedRoom : public Room
+{
+public:
+	EnchantedRoom(int roomNo, std::shared_ptr<Spell> s) : Room(roomNo), spell(s){ }
+
+private:
+	std::shared_ptr<Spell> spell;
+};
+
 class Wall : public MapSite
 {
 public:
@@ -53,13 +63,25 @@ public:
 
 	virtual void Enter();
 
-	std::shared_ptr<Room> OtherSideFrom(std::shared_ptr<Room>);
+	virtual std::shared_ptr<Room> OtherSideFrom(std::shared_ptr<Room>);
 
-	virtual ~Door();
+	virtual ~Door() = default;
 private:
 	std::shared_ptr<Room> _room1;
 	std::shared_ptr<Room> _room2;
 	bool _isOpen;
+};
+
+class DoorNeedingSpell : public Door
+{
+public:
+	DoorNeedingSpell(std::shared_ptr<Room> r1 = 0, std::shared_ptr<Room> r2 = 0) : Door(r1, r2) { }
+
+	virtual void Enter();
+	virtual std::shared_ptr<Room> OtherSideFrom(std::shared_ptr<Room>);
+
+	virtual ~DoorNeedingSpell() = default;
+
 };
 
 // 表示并管理房间集合的类
@@ -101,6 +123,27 @@ public:
 	}
 
 	virtual ~MazeFactory() = default;
+};
+
+// 魔法迷宫
+class EnchantedMazeFactory : public MazeFactory
+{
+public:
+	EnchantedMazeFactory() = default;
+
+	// 用这个工厂创建的所有Roon 都是EnchantedRoom
+	// 保证了DoorNeedingSpell的正确性
+	virtual std::shared_ptr<Room> MakeDoor(int n) const
+	{
+		return std::make_shared<EnchantedRoom>(n, CastSpell());
+	}
+
+	virtual std::shared_ptr<Door> MakeDoor(std::shared_ptr<Room> r1, std::shared_ptr<Room> r2)
+	{
+		return std::make_shared<DoorNeedingSpell>(r1, r2);
+	}
+protected:
+	std::shared_ptr<Spell> CastSpell() const;
 };
 
 // 创建迷宫的类
@@ -160,6 +203,3 @@ public:
 		return aMaze;
 	}
 };
-
-
-
