@@ -1,3 +1,5 @@
+#include <memory>
+
 // Maze, P63
 // 创建迷宫,
 // 一个迷宫由一系列房间组成, 一个房间知道它的邻居.
@@ -15,7 +17,7 @@ class MapSite
 public:
 	virtual void Enter(/*Pawn& */) = 0;
 
-	virtual ~MapSite() { }
+	virtual ~MapSite() = default;
 };
 
 class Room : public MapSite
@@ -23,14 +25,14 @@ class Room : public MapSite
 public:
 	Room(int roomNo) : _roomNumber(roomNo) { }
 
-	MapSite* GetSide(Direction) const;
-	void SetSide(Direction, MapSite*); 
+	std::shared_ptr<MapSite> GetSide(Direction) const;
+	void SetSide(Direction, std::shared_ptr<MapSite>); 
 
 	virtual void Enter();
 
 	virtual ~Room();
 private:
-	MapSite* _sides[4];
+	std::shared_ptr<MapSite> _sides[4];
 	int _roomNumber;
 };
 
@@ -47,16 +49,16 @@ public:
 class Door : public MapSite
 {
 public:
-	Door(Room* = 0, Room * = 0);
+	Door(std::shared_ptr<Room> r1 = 0, std::shared_ptr<Room> r2 = 0): _room1(r1), _room2(r2) { }
 
 	virtual void Enter();
 
-	Room* OtherSideFrom(Room*);
+	std::shared_ptr<Room> OtherSideFrom(std::shared_ptr<Room>);
 
 	virtual ~Door();
 private:
-	Room* _room1;
-	Room* _room2;
+	std::shared_ptr<Room> _room1;
+	std::shared_ptr<Room> _room2;
 	bool _isOpen;
 };
 
@@ -67,39 +69,95 @@ class Maze
 public:
 	Maze();
 
-	void AddRoom(Room*);
-	Room* RoomNo(int) const;
+	void AddRoom(std::shared_ptr<Room>);
+	std::shared_ptr<Room> RoomNo(int) const;
 private:
 	//...
+};
+
+class MazeFactory
+{
+public:
+	MazeFactory() = default;
+
+	virtual std::shared_ptr<Maze> MakeMaze() const
+	{
+		return std::make_shared<Maze>();
+	}
+
+	virtual std::shared_ptr<Wall> MakeWall() const
+	{
+		return std::make_shared<Wall>();
+	}
+
+	virtual std::shared_ptr<Room> MakeRoom(int roomNo) const
+	{
+		return std::make_shared<Room>(roomNo);
+	}
+
+	virtual std::shared_ptr<Door> MakeDoor(std::shared_ptr<Room> r1, std::shared_ptr<Room> r2) const
+	{
+		return std::make_shared<Door>(r1, r2);
+	}
+
+	virtual ~MazeFactory() = default;
 };
 
 // 创建迷宫的类
 class MazeGame
 {
 public:
+	// 直接调用各个构建的构造函数
 	// 用一系列操作将构建加入到迷宫中
 	// 可以将room的四周初始化为墙以简化代码(但这不是问题本质)
 	// 这种办法对迷宫布局进行硬编码, 不够灵活
-	Maze* CreateMaze()
+	std::shared_ptr<Maze> CreateMaze()
 	{
-		Maze* aMaze = new Maze;
-		Room* r1 = new Room(1);
-		Room* r2 = new Room(2);
-		Door* theDoor = new Door(r1, r2);
+		std::shared_ptr<Maze> aMaze = std::make_shared<Maze>();
+		std::shared_ptr<Room> r1 = std::make_shared<Room>(1);
+		std::shared_ptr<Room> r2 = std::make_shared<Room>(2);
+		std::shared_ptr<Door> theDoor = std::make_shared<Door>(r1, r2);
 
 		aMaze->AddRoom(r1);
 		aMaze->AddRoom(r2);
 
-		r1->SetSide(North, new Wall);
+		r1->SetSide(North, std::make_shared<Wall>());
 		r1->SetSide(East, theDoor);
-		r1->SetSide(South, new Wall);
-		r1->SetSide(West, new Wall);
+		r1->SetSide(South, std::make_shared<Wall>());
+		r1->SetSide(West, std::make_shared<Wall>());
 
-		r2->SetSide(North, new Wall);
-		r2->SetSide(East, new Wall);
-		r2->SetSide(South, new Wall);
+		r2->SetSide(North, std::make_shared<Wall>());
+		r2->SetSide(East, std::make_shared<Wall>());
+		r2->SetSide(South, std::make_shared<Wall>());
 		r2->SetSide(West, theDoor);
 
 		return aMaze;
 	}
+
+	// 使用工厂
+	// 方便使用不同的构件创建迷宫(派生MazeFactory)
+	std::shared_ptr<Maze> CreateMaze(MazeFactory& factory)
+	{
+		std::shared_ptr<Maze> aMaze = factory.MakeMaze();
+		std::shared_ptr<Room> r1 = factory.MakeRoom(1);
+		std::shared_ptr<Room> r2 = factory.MakeRoom(2);
+		
+		std::shared_ptr<Door> aDoor = factory.MakeDoor(r1, r2);
+		
+		aMaze->AddRoom(r1);
+		aMaze->AddRoom(r2);
+
+		r1->SetSide(North, factory.MakeWall());
+		r1->SetSide(East, aDoor);
+		r1->SetSide(South, factory.MakeWall());
+		r1->SetSide(West, factory.MakeWall());
+
+		r2->SetSide(North, factory.MakeWall());
+		r2->SetSide(East, factory.MakeWall());
+		r2->SetSide(South, factory.MakeWall());
+		r2->SetSide(West, aDoor);
+
+		return aMaze;
+	}
 };
+
