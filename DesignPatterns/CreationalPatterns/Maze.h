@@ -1,5 +1,5 @@
 #include <memory>
-
+#include <iostream>
 // Maze, P63
 // 创建迷宫,
 // 一个迷宫由一系列房间组成, 一个房间知道它的邻居.
@@ -208,6 +208,7 @@ protected:
 	MazeBuilder() = default;
 };
 
+// Builder模式
 // 普通迷宫
 class StandardMazeBuilder : public MazeBuilder
 {
@@ -254,6 +255,36 @@ private:
 	std::shared_ptr<Maze> _currentMaze;
 };
 
+// 迷宫结构记数
+// 迷宫的结构由MazeGame决定
+class CountingMazeBuilder : public MazeBuilder
+{
+public:
+	CountingMazeBuilder():MazeBuilder(), _doors(0), _rooms(0) { }
+	void BuildMaze() override
+	{
+		_doors = 0;
+		_rooms = 0;
+	}
+	void BuildRoom(int) override
+	{
+		_rooms++;
+	}
+	void BuildDoor(int, int) override
+	{
+		_doors++;
+	}
+	virtual void AddWall(int, Direction);
+
+	void GetCounts(int& rooms, int& doors) const
+	{
+		rooms = _rooms;
+		doors = _doors;
+	}
+private:
+	int _doors;
+	int _rooms;
+};
 
 // 创建迷宫的类
 class MazeGame
@@ -324,3 +355,24 @@ public:
 		return builder.GetMaze();
 	}
 };
+
+int main()
+{
+	std::shared_ptr<Maze> maze;
+	MazeGame game;
+	StandardMazeBuilder builder;
+
+	maze = game.CreateMaze(builder);
+	// maze = builder.GetMaze();
+
+	int rooms, doors;
+	CountingMazeBuilder countBuilder;
+	auto _ = game.CreateMaze(countBuilder);
+
+	countBuilder.GetCounts(rooms, doors);
+
+	std::cout << "The maze has "
+		<< rooms << " rooms and "
+		<< doors << "doors" << std::endl;
+}
+
