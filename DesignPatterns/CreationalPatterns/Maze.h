@@ -37,6 +37,7 @@ private:
 };
 
 class Spell;
+// 魔咒Room
 class EnchantedRoom : public Room
 {
 public:
@@ -45,6 +46,23 @@ public:
 private:
 	std::shared_ptr<Spell> spell;
 };
+// 带炸弹的房间
+class RoomWithABomb : public Room
+{
+public:
+	RoomWithABomb(int roomNo) : Room(roomNo) { }
+	
+	std::shared_ptr<MapSite> GetSide(Direction) const;
+	void SetSide(Direction, std::shared_ptr<MapSite>);
+
+	virtual void Enter();
+
+	virtual ~RoomWithABomb() = default;
+private:
+	std::shared_ptr<MapSite> _sides[4];
+	int _roomNumber;
+};
+
 
 class Wall : public MapSite
 {
@@ -54,6 +72,17 @@ public:
 	virtual void Enter();
 
 	virtual ~Wall() = default;
+};
+
+// 被爆炸的墙
+class BombedWall : public Wall
+{
+public:
+	BombedWall() = default;
+	
+	void Enter() override;
+
+	virtual ~BombedWall() = default;
 };
 
 class Door : public MapSite
@@ -72,6 +101,7 @@ private:
 	bool _isOpen;
 };
 
+// 魔咒开门的Door
 class DoorNeedingSpell : public Door
 {
 public:
@@ -92,11 +122,14 @@ public:
 	Maze();
 
 	void AddRoom(std::shared_ptr<Room>);
+	// 找不到则返回nullptr
 	std::shared_ptr<Room> RoomNo(int) const;
 private:
 	//...
 };
 
+
+// 普通迷宫工厂
 class MazeFactory
 {
 public:
@@ -125,7 +158,7 @@ public:
 	virtual ~MazeFactory() = default;
 };
 
-// 魔法迷宫
+// 魔法迷宫工厂
 class EnchantedMazeFactory : public MazeFactory
 {
 public:
@@ -145,6 +178,82 @@ public:
 protected:
 	std::shared_ptr<Spell> CastSpell() const;
 };
+
+// 炸弹迷宫工厂
+class BombedMazeFactory : public MazeFactory
+{
+public:
+	std::shared_ptr<Wall> MakeWall() const override
+	{
+		return std::make_shared<BombedWall>();
+	}
+
+	std::shared_ptr<Room> MakeRoom(int roomNo) const override
+	{
+		return std::make_shared<RoomWithABomb>(roomNo);
+	}
+};
+
+// 迷宫生成器基类
+class MazeBuilder
+{
+public:
+	virtual void BuildMaze() { }
+	virtual void BuildRoom(int roomNo){ }
+	virtual void BuildDoor(int roomFrom, int roomTo){ }
+
+	virtual std::shared_ptr<Maze> GetMaze() { return 0; }
+
+protected:
+	MazeBuilder() = default;
+};
+
+// 普通迷宫
+class StandardMazeBuilder : public MazeBuilder
+{
+public:
+	//template <class U> explicit shared_ptr (U* p);
+	StandardMazeBuilder():_currentMaze(nullptr) {  }
+
+	void BuildMaze() override
+	{
+		_currentMaze = std::make_shared<Maze>();
+	}
+	void BuildRoom(int i) override
+	{
+		if (!_currentMaze->RoomNo(i))
+		{
+			std::shared_ptr<Room> room = std::make_shared<Room>(i);
+			_currentMaze->AddRoom(room);
+
+			room->SetSide(North, std::make_shared<Wall>());
+			room->SetSide(East, std::make_shared<Wall>());
+			room->SetSide(South, std::make_shared<Wall>());
+			room->SetSide(West, std::make_shared<Wall>());
+		}
+	}
+	void BuildDoor(int n1, int n2) override
+	{
+		std::shared_ptr<Room> r1 = _currentMaze->RoomNo(n1);
+		std::shared_ptr<Room> r2 = _currentMaze->RoomNo(n2);
+		std::shared_ptr<Door> d = std::make_shared<Door>(r1, r2);
+
+		r1->SetSide(CommonWall(r1, r2), d);
+		r2->SetSide(CommonWall(r2, r1), d);
+	}
+	std::shared_ptr<Maze> GetMaze() override
+	{
+		return _currentMaze;
+	}
+private:
+	// 确定两个房间之间的公共墙壁方位
+	Direction CommonWall(std::shared_ptr<Room> r1, std::shared_ptr<Room> r2)
+	{
+		// TODO
+	}
+	std::shared_ptr<Maze> _currentMaze;
+};
+
 
 // 创建迷宫的类
 class MazeGame
@@ -201,5 +310,17 @@ public:
 		r2->SetSide(West, aDoor);
 
 		return aMaze;
+	}
+
+	// 使用Builder生成器
+	std::shared_ptr<Maze> CreateMaze(MazeBuilder& builder)
+	{
+		builder.BuildMaze();
+
+		builder.BuildRoom(1);
+		builder.BuildRoom(2);
+		builder.BuildDoor(1, 2);
+
+		return builder.GetMaze();
 	}
 };
