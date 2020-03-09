@@ -129,12 +129,13 @@ private:
 };
 
 
-// 普通迷宫工厂
+// 普通迷宫工厂, 工厂模式
 class MazeFactory
 {
 public:
 	MazeFactory() = default;
 
+	// 工厂方法
 	virtual std::shared_ptr<Maze> MakeMaze() const
 	{
 		return std::make_shared<Maze>();
@@ -284,6 +285,22 @@ public:
 private:
 	int _doors;
 	int _rooms;
+};
+
+// Prototype 原型模式
+class MazePrototypeFactory : public MazeFactory
+{
+public:
+	MazePrototypeFactory(std::shared_ptr<Maze>, std::shared_ptr<Wall>, std::shared_ptr<Room>, std::shared_ptr<Door>);
+	std::shared_ptr<Maze> MakeMaze() const override;
+	std::shared_ptr<Room> MakeRoom(int) const override;
+	std::shared_ptr<Wall> MakeWall() const override;
+	std::shared_ptr<Door> MakeDoor(std::shared_ptr<Room> r1, std::shared_ptr<Room> r2) const override;
+private:
+	std::shared_ptr<Maze> _prototypeMaze;
+	std::shared_ptr<Room> _prototypeRoom;
+	std::shared_ptr<Wall> _prototypeWall;
+	std::shared_ptr<Door> _prototypeDoor;
 };
 
 // 创建迷宫的类
