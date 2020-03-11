@@ -24,7 +24,6 @@ class Room : public MapSite
 {
 public:
 	Room(int roomNo) : _roomNumber(roomNo) { }
-
 	std::shared_ptr<MapSite> GetSide(Direction) const;
 	void SetSide(Direction, std::shared_ptr<MapSite>); 
 
@@ -68,6 +67,12 @@ class Wall : public MapSite
 {
 public:
 	Wall();
+	Wall(const Wall&) = default;
+
+	virtual std::shared_ptr<Wall> clone()
+	{
+		return std::make_shared<Wall>(*this);
+	}
 
 	virtual void Enter();
 
@@ -79,16 +84,49 @@ class BombedWall : public Wall
 {
 public:
 	BombedWall() = default;
-	
+	BombedWall(const BombedWall& bw) :Wall(bw)
+	{
+		_bomb = bw._bomb;
+	}
+
+	std::shared_ptr<Wall> clone() override 
+	{
+		return std::make_shared<BombedWall>(*this);
+	}
+
+
 	void Enter() override;
 
+	bool HasBomb() { return _bomb; }
+
 	virtual ~BombedWall() = default;
+private:
+	bool _bomb;
 };
 
 class Door : public MapSite
 {
 public:
-	Door(std::shared_ptr<Room> r1 = 0, std::shared_ptr<Room> r2 = 0): _room1(r1), _room2(r2) { }
+	Door(std::shared_ptr<Room> r1 = 0, std::shared_ptr<Room> r2 = 0): _room1(r1), _room2(r2), _isOpen(false) { }
+
+	// copy constrcutor
+	Door(const Door& d)
+	{
+		_room1 = d._room1;
+		_room2 = d._room2;
+		_isOpen = d._isOpen;
+	}
+
+	virtual void Initialize(std::shared_ptr<Room>r1, std::shared_ptr<Room> r2)
+	{
+		_room1 = r1;
+		_room2 = r2;
+		_isOpen = false;
+	}
+	virtual std::shared_ptr<Door> clone() const
+	{
+		return std::make_shared<Door>(*this);
+	}
 
 	virtual void Enter();
 
