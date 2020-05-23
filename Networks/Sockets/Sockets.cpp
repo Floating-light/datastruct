@@ -26,8 +26,8 @@ int main()
 
 		sockaddr_in serAddr;
 		serAddr.sin_family = AF_INET;
-		serAddr.sin_port = htons(4303);
-		serAddr.sin_addr.S_un.S_addr = inet_addr("192.168.0.140");
+		serAddr.sin_port = htons(5555);
+		serAddr.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
 		if (connect(sclient, (sockaddr*)&serAddr, sizeof(serAddr)) == SOCKET_ERROR)
 		{  //连接失败 
 			printf("connect error !");
@@ -37,6 +37,7 @@ int main()
 
 		string data;
 		cin >> data;
+		std::cout << "=---------->>> : : " << data << std::endl;
 		const char* sendData;
 		sendData = data.c_str();   //string转const char* 
 		//char * sendData = "你好，TCP服务端，我是客户端\n";
