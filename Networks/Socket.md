@@ -27,7 +27,7 @@ IP 127.0.0.1为特殊IP，回送(loopback),它引用自己，这一机制允许�
 
 #### 常用API:
 * socket() 创建Socket,分配一些系统资源。
-* bind() 通常用于服务端，将一个socket和一个socket地址结构关联，它指定了本地IP地址和端口号。
+* bind() 通常用于服务端，将一个socket和一个socket地址结构关联，它指定了本地IP地址和端口号,可设定为绑定到本机的任何IP。
 * listen() 用在服务端，使得一个被绑定的TCP socket进入监听状态。
 * connect() 用在客户端，分配给Socket一个空闲的端口号，对于TCP Socket,还会尝试建立一个新的TCP连接。
 * accept() 用在服务端，它接受来自远程客户端的创建TCP连接的请求`(connect)`，并创建一个新的Socket来表示这次连接两端的Sockets。
@@ -113,4 +113,10 @@ UE 定义的这一`Socket`模块，大体上分两个主要的继承线路，一
 
 `ISocketSubsystem::Get()`获取不同平台的单例`ISocketSubsystem`实例,在其上进一步调用`CreateSocket`创建`FSocket`.
 
-UE4 采用`Module`来管理不同的平台`ISocketSubsystem`的创建和销毁。`FSocketSubsystemWindows`调用`CreateSocketSubsystem`和`DestroySocketSubsystem`来创建和销毁子系统。这两个函数extern 声明在`SocketSubsystem.cpp`中，而对应对每个平台的`Subsystem`类的`cpp`文件中都实现了这两个函数。
+UE4 采用`Module`来管理不同的平台`ISocketSubsystem`的创建和销毁。`FSocketSubsystemWindows`调用`CreateSocketSubsystem`和`DestroySocketSubsystem`来创建和销毁子系统。这两个函数extern 声明在`SocketSubsystem.cpp`中，而对应对每个平台的`Subsystem`类的`cpp`文件中都实现了这两个函数.
+
+因此,Socket模块总的使用流程是：
+1. ISocketSubsystem::Get(const FName& SubsystemName)获取一个指定平台Name的子系统。
+2. ISocketSubsystem::Get中定义了一个静态结构体变量,它只有一个成员`FSocketSubsystemModule`，在这个静态变量初始化的时候，用`FModuleManager::LoadModuleChecked<FSocketSubsystemModule>("Sockets")`的返回值初始化`FSocketSubsystemModule`成员变量。最后返回GetSocketSubsystem(SubsystemName)的返回值。
+3. `FSocketSubsystemModule`在加载时就会初始化一个默认的子系统，通过直接调用CreateSocketSubsystem( *this )构建一个默认子系统,至于调用的是什么平台的实现版本，是由什么决定的?
+4. 在获取到了一个`ISocketSubsystem`后，就可以调用`ISocketSubsystem::CreateSocket`创建一个相关平台的`Socket`,这个`Socket`的动态类型可能是`FSocketBSD`，也可能是相关平台定义的子类比如`FSocketBSDIOS`,这又取决于这个子系统的动态类型，最终又取决于调用`ISocketSubsystem`的静态函数`Get`时的参数`SubsystemName`通常应该是此时运行的平台。
