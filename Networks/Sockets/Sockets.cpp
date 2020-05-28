@@ -16,7 +16,7 @@ int main()
 	{
 		return 0;
 	}
-	while (true) {
+	if (true) {
 		SOCKET sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (sclient == INVALID_SOCKET)
 		{
@@ -26,7 +26,7 @@ int main()
 
 		sockaddr_in serAddr;
 		serAddr.sin_family = AF_INET;
-		serAddr.sin_port = htons(5555);
+		serAddr.sin_port = htons(3019);
 		serAddr.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
 		if (connect(sclient, (sockaddr*)&serAddr, sizeof(serAddr)) == SOCKET_ERROR)
 		{  //连接失败 
@@ -34,29 +34,37 @@ int main()
 			closesocket(sclient);
 			return 0;
 		}
+		while (1)
+		{
+			string data;
+			cin >> data;
+			std::cout << "Sent--->" << data << std::endl;
+			const char* sendData;
+			sendData = data.c_str();   //string转const char* 
+			//char * sendData = "你好，TCP服务端，我是客户端\n";
+			send(sclient, sendData, strlen(sendData), 0);
+			if (data == "quit" || data == "quitClient")
+			{
+				closesocket(sclient);
+				
+				break;
+			}
+		}
 
-		string data;
-		cin >> data;
-		std::cout << "=---------->>> : : " << data << std::endl;
-		const char* sendData;
-		sendData = data.c_str();   //string转const char* 
-		//char * sendData = "你好，TCP服务端，我是客户端\n";
-		send(sclient, sendData, strlen(sendData), 0);
 		//send()用来将数据由指定的socket传给对方主机
 		//int send(int s, const void * msg, int len, unsigned int flags)
 		//s为已建立好连接的socket，msg指向数据内容，len则为数据长度，参数flags一般设0
 		//成功则返回实际传送出去的字符数，失败返回-1，错误原因存于error 
 
-		char recData[255];
+		/*char recData[255];
 		int ret = recv(sclient, recData, 255, 0);
 		if (ret > 0) {
 			recData[ret] = 0x00;
 			printf(recData);
-		}
-		closesocket(sclient);
+		}*/
+		//
+
 	}
-
-
 	WSACleanup();
 	return 0;
 

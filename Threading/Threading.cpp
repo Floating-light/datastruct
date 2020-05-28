@@ -7,6 +7,9 @@
 #include <thread>
 #include <hash_map>
 
+
+#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+
 void testFunc1()
 {
     std::cout << "testFunc1 ^-^" << std::endl;

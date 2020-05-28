@@ -26,7 +26,7 @@ public:
     }
 };
 
-class Solution1 {
+class Solution2 {
 
     string str;
     bool delTimes = false;
