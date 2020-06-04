@@ -46,7 +46,6 @@ int main()
 			if (data == "quit" || data == "quitClient")
 			{
 				closesocket(sclient);
-				
 				break;
 			}
 		}

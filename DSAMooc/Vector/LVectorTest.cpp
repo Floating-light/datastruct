@@ -33,6 +33,5 @@ int main(int argc, char **argv){
     //std::cout << "The position of the element 3: " << lv.search(3) << std::endl;
     //std::cout << "The position of the element 2: " << lv.search(2) << std::endl;
     //std::cout << "The position of the element 0: " << lv.search(0) << std::endl;
-
     return 0;
 }
