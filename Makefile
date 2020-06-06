@@ -30,5 +30,7 @@ CSChallenge:
 clean: 
 	find . -name "*.exe" -exec rm -rf {} \;
 	find . -name "*.o" -exec rm -rf {} \;
+	find . -name "*.ilk" -exec rm -rf {} \;
+	find . -name "*.pdb" -exec rm -rf {} \;
 
 FORCE:
