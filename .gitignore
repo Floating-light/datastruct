@@ -178,3 +178,5 @@ $RECYCLE.BIN/
 *.exe
 
 TestEverything/
+
+*.txt
