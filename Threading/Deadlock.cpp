@@ -41,9 +41,7 @@ public:
         cout << "From " << id << ": " << value << std::endl;
     }
     {
-        // to avoid deadlock
-        // make sure every body is locking the mutexes in the same order
-        // or use std::lock, that can be use to lock arbitrary number of lockable objects,使用一些避免死锁的算法。
+        
         std::lock(_mu, _mu2);
         std::lock_guard<std::mutex> locker2(_mu, std::adopt_lock);
         std::lock_guard<std::mutex> locker(_mu2, std::adopt_lock);

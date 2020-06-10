@@ -94,9 +94,7 @@ void shared_print(string id, int value)
             // std::unique_lock<std::mutex> locker2(_mu_open); // still not thread safe
             _f.open("log.txt"); // thread safe
         }
-    }
-    std::call_once(_flag, [&](){ _f.open("log.txt");}); // file will be opened only once by one thread
-    
+    }   
     std::lock_guard<std::mutex> locker(_mu);
     cout << "From " << id << ": " << value << std::endl;
 }
