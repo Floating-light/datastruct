@@ -93,21 +93,7 @@ ostream &errorMsg(ostream&os, const Args&... rest)
 // 保持类型信息有两阶段过程:
 // 1. 为保持实参中类型信息--->将emplace_back()的函数参数定义为模板类型参数的右值引用
 // 2. 将这些实参传给construct时,使用forward保持实参原始类型
-      vector<_Tp, _Alloc>::
-      emplace_back(_Args&&... __args)
-      {
-	if (this->_M_impl._M_finish != this->_M_impl._M_end_of_storage)
-	  {
-	    _GLIBCXX_ASAN_ANNOTATE_GROW(1);
-	    _Alloc_traits::construct(this->_M_impl, this->_M_impl._M_finish,
-				     std::forward<_Args>(__args)...);
-	    ++this->_M_impl._M_finish;
-	    _GLIBCXX_ASAN_ANNOTATE_GREW(1);
-	  }
-	else
-	  _M_realloc_insert(end(), std::forward<_Args>(__args)...);
-      }
-      make_shared<int>(0);
+
 int main()
 {
     // int i = 0;

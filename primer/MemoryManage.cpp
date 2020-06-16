@@ -16,5 +16,8 @@ int main()
     allocator<int>().deallocate(p, 5);
     MyClass* my = (MyClass*)malloc(sizeof(MyClass));
     my->MyClass::MyClass();
-    
+    operator new(10); // 直接分配10个单位的内存的函数=----> malloc
+    new(MyClass);
+    vector<int> v;
+    operator delete(ptr); // ---->> free
 }
