@@ -1,7 +1,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
-
+#include <memory>
 using namespace std;
 
 void* myAlloc(size_t size)
@@ -121,7 +121,8 @@ public:
     // param one 必须是size_t
     //                 括号内即placement arguments
     // Foo* pf = new(300, 'c')Foo;
-
+    // 通常用于在已经开辟好的内存空间中调用构造函数,构造新的对象, 这个重载没有实质性的作用,
+    // 只是为了利用new experssion的流程中 调用构造函数的作用。 
     void* operator new(size_t size, size_t extra, char c)
     {
         printf("placement new(size_t extra) : %d", c);
@@ -158,4 +159,6 @@ int main()
 
     Foo* f2 = new(200, 'b')Foo(12);
     delete f;
+    allocator<string>().allocate(12);
+    string* res = new string[3] { "q4e23", "234", "erter"};
 }
