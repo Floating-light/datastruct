@@ -91,7 +91,7 @@ print(cout, 2, 3.14, "asd");// 包中有两个参数
 ```c++
 ostream& print(ostream&, const int&, const double&, const char[4]&);
 ```
-在`print`函数的`return`语句中的递归调用也触发了扩展(有...出现),只是它直接将`rest`扩展为逗号分隔的参数列表, 而没有改变各个元素的类型。
+在`print`函数的`return`语句中的递归调用也触发了扩展(有...出现),只是它直接将`rest`扩展为逗号分隔的参数列表, 而没有改变各个元素本身的类型。
 考虑更清晰的一个例子,有这样一个函数: 
 ```c++
 template <typename T>
