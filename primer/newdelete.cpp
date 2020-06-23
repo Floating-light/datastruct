@@ -93,6 +93,9 @@ public:
     {
         std::cout << "deconstructor from Foo" << std::endl;
     }
+    // new, delete 必须是static 函数,
+    // 调用时对象还没有构建好, 无法通过对象调用
+    // 反正这样, 写不写都是static,被安排了
         // 优先调用(相对于global d )
     void* operator new(size_t size)
     {
@@ -137,6 +140,10 @@ public:
     }
 };
 
+
+// 内存管理
+// 1. 减少malloc的调用次数, 提升性能
+// 2. 减少cookie的使用, 节省空间
 int main()
 {
     // experssion new, 不能重载
