@@ -138,19 +138,89 @@ void Airplane::operator delete(void* deadObject, size_t size)
     headOfFreeList = carcass;
 }
 
+class MyAllocator
+{
+public:
+    struct obj
+    {
+        struct obj* next;
+    };
+public:
+    void* allocate(size_t);
+    void deallocate(void*, size_t);
+private:
+    obj* freeStore = nullptr;
+    const int CHUNK = 5;
+};
 
+void* MyAllocator::allocate(size_t size)
+{
+    obj* p;
+    if(!freeStore)
+    {
+        freeStore = p = (obj*)malloc(CHUNK*size);
+        for(int i = 0; i < (CHUNK-1); ++i)
+        {
+            p->next = (obj*)((char*)p + size);// char, '+'每次移动1个byte
+            p = p->next;
+        }
+        p->next = nullptr;
+    }
+    p = freeStore;
+    freeStore = freeStore->next;
+    return p;
+}
+
+void MyAllocator::deallocate(void*p, size_t)
+{
+    ((obj*)p)->next = freeStore;
+    freeStore = (obj*)p;
+}
+
+class Foo
+{
+public:
+    long L;
+    string str;
+    static MyAllocator myAlloc;
+public:
+    Foo(long l): L(l){}
+    static void* operator new(size_t size)
+    {
+        return myAlloc.allocate(size);
+    }
+    static void operator delete(void* pdead, size_t size)
+    {
+        return myAlloc.deallocate(pdead, size);
+    }
+};
+MyAllocator Foo::myAlloc;
+
+class Test
+{
+public:
+    void func1()
+    {
+
+    }
+    string func2(int i, string s)
+    {
+
+    }
+};
+
+// 按以上方法, 每个需要做内存管理的类都需要写内存管理相关的操作,
+// 这样一来重复的操作太多
+// 同样的东西应该集中在一起
 int main()
 {
-    Airplane* s1 = new Airplane(1, 'a');
-    Airplane* s2 = new Airplane(2, 'b');
-    s1->set(12, 'b');
-    s2->set(1, 'n');
-    std::cout << s1 << std::endl;
-    std::cout << s2 << std::endl;
-    std::cout << "sizeof Airplane: " << sizeof(Airplane) << std::endl;
+    Foo* foo[8];
+    for(int i = 0; i < 8; ++i)
+    {
+        foo[i] = new Foo(i*10);
+        std::cout << "Number: " << i << "--->"<<foo[i] << ", data: " << foo[i]->L << std::endl;
+    }
+    std::cout<< "size of Test(not member data): "<< sizeof(Test) << std::endl;
+    std::cout<< "size of Foo: "<< sizeof(Foo) << std::endl;
 
-    unsigned long* i1 = new unsigned long[2] {1,2};
-
-    std::cout << i1 << std::endl;
-    std::cout << i1+1 << std::endl;
 }
