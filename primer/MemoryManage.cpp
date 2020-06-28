@@ -7,6 +7,7 @@ using namespace std;
 // 1. 减少malloc调用次数, 提高运行速度(虽然malloc 并不会很慢)
 // 2. 减少内存分配时的cookie使用(8 byte)
 
+// version 1
 class Screen
 {
 public:
@@ -52,6 +53,7 @@ void Screen::operator delete(void * p, size_t)
     freeStore = deleted;
 }
 
+// version 2
 // Effective C++ 2e, item 10.
 // 考虑到记录下一个可用位置的指针,与这个类的数据成员不可能同时有用
 // 可以用 union 使类的数据成员和next指针共用一块内存区域, 
@@ -138,6 +140,7 @@ void Airplane::operator delete(void* deadObject, size_t size)
     headOfFreeList = carcass;
 }
 
+// version 3
 class MyAllocator
 {
 public:
@@ -196,6 +199,34 @@ public:
 };
 MyAllocator Foo::myAlloc;
 
+// 观察 Foo 和内存管理相关写法, 十分固定
+// 我们可以用宏简化这一写法
+#define DECLARE_POOL_ALLOC() \
+public:\
+    void* operator new(size_t size) { return myAlloc.allocate(size);} \
+    void operator delete(void* pdead, size_t size) { myAlloc.deallocate(pdead, size); } \
+protected: \
+    static MyAllocator myAlloc; \
+private:
+
+#define IMPLEMENT_POOL_ALLOC(class_name) \
+MyAllocator class_name::myAlloc;
+
+class Goo
+{
+    DECLARE_POOL_ALLOC()
+public:
+    int x;
+    int y;
+    Goo(int _x, int _y) : x(_x),y(_y) { }
+    friend std::ostream& operator<<(std::ostream& os, const Goo& g);
+};
+IMPLEMENT_POOL_ALLOC(Goo)
+std::ostream& operator<<(ostream& os, const Goo& g)
+{
+    std::cout << "(" << g.x << ", " << g.y << ")";
+    return os;
+}
 class Test
 {
 public:
@@ -220,7 +251,14 @@ int main()
         foo[i] = new Foo(i*10);
         std::cout << "Number: " << i << "--->"<<foo[i] << ", data: " << foo[i]->L << std::endl;
     }
-    std::cout<< "size of Test(not member data): "<< sizeof(Test) << std::endl;
-    std::cout<< "size of Foo: "<< sizeof(Foo) << std::endl;
+    std::cout << "size of Test(not member data): "<< sizeof(Test) << std::endl;
+    std::cout << "size of Foo: "<< sizeof(Foo) << std::endl;
+    std::cout << "--------------------------------" << std::endl;
+    Goo* goo[11];
+    for(int j = 0; j < 11; ++j)
+    {
+        goo[j] = new Goo(1*j, 2*j);
+        std::cout << "Number: " << j << "--->" << goo[j] << ", data: "<< *(goo[j]) << std::endl;
+    }
 
 }
