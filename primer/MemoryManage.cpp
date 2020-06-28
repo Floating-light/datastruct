@@ -199,8 +199,10 @@ public:
 };
 MyAllocator Foo::myAlloc;
 
+// version 4
 // 观察 Foo 和内存管理相关写法, 十分固定
 // 我们可以用宏简化这一写法
+// MFC 是这样做的
 #define DECLARE_POOL_ALLOC() \
 public:\
     void* operator new(size_t size) { return myAlloc.allocate(size);} \
@@ -222,6 +224,7 @@ public:
     friend std::ostream& operator<<(std::ostream& os, const Goo& g);
 };
 IMPLEMENT_POOL_ALLOC(Goo)
+
 std::ostream& operator<<(ostream& os, const Goo& g)
 {
     std::cout << "(" << g.x << ", " << g.y << ")";
