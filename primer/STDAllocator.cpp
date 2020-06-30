@@ -1,7 +1,8 @@
 #include <iostream>
 #include <memory>
+#include <alloca.h>
 #include <vector>
-
+#include <stl_alloc.h>
 using namespace std;
 // class allocator : xmemory---> line 738
 
@@ -12,11 +13,9 @@ using namespace std;
 // 对象本身的大小必须大于 4 byte
 int main()
 {
-    allocator<int> alloc;
+    allocator<int> alloc;alloc.allocate()
+    alloc.construct()
     std::vector<int> v;
-    v.push_back()
-    if(true)
-    {
-        ///
-    }
+    v.push_back();
+
 }
