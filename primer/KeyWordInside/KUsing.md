@@ -31,10 +31,82 @@ p3 = &aa;
 // *p3 = aa; // 表达式必须是可修改的左值
 ```
 ### static
+<<<<<<< HEAD
 1. 修饰普通变量, 使变量存储在静态区(和全局变量一起),在mian函数之前就分配了空间并初始化。
 2. 修饰普通函数, 表明函数作用范围,仅在定义该函数的文件内才能使用。(防止与别的命名空间中的函数重名)
 3. 修饰成员变量, 使得所有对象只保存同一个该变量,类不需要初始化就能访问。
 4. 修饰成员函数, 同样无需生成对象就能访问,但不能访问非静态成员(变量和函数)。
+=======
+如果想将函数中此变量的值保存至下一次调用时，如何实现？
+
+控制变量的存储方式和可见性.
+
+https://www.runoob.com/w3cnote/cpp-static-usage.html
+
+因为函数在程序运行中被调用，所以静态数据成员不能在任何函数内分配空间和初始化。
+
+```c++
+// file StaticVariable.h
+#pragma once
+// 全局静态变量,被多次include并不会报重复定义的错
+// 因为static限定变量的作用域在当前文件,即包含了这个头文件的地方(编译单元)
+static int GlobalItem = 111;
+// 如果去掉static则会报重复定义,因为此时它的作用域都是同一个(全局作用域)
+// 真正实现全局变量应该用extern
+// 类的static成员变量也不能在头文件中定义, 多次include后会重复定义,因为它在类名的作用域下.
+
+// file ClassB.h
+#pragma once
+class ClassB
+{
+public:
+	static void SetGlobalItem(int i);
+	static int GetGlobalItem();
+};
+
+// file ClassB.cpp
+#include "ClassB.h"
+#include "StaticVariable.h"
+void ClassB::SetGlobalItem(int i)
+{
+	GlobalItem = i;
+}
+
+int ClassB::GetGlobalItem()
+{
+	return GlobalItem;
+}
+
+// file main.cpp
+#include <iostream>
+#include "ClassB.h"
+#include "StaticVariable.h"
+
+int main()
+{
+    std::cout << "Global item init value : " << GlobalItem << std::endl;
+    std::cout << "Global item init value in classB.cpp : " << ClassB::GetGlobalItem() << std::endl;
+    ClassB::SetGlobalItem(-1);
+    GlobalItem = -13;
+    std::cout << "Global item after set -13 : " << GlobalItem << std::endl;
+    std::cout << "Global item in classB.cpp after set -1: " << ClassB::GetGlobalItem() << std::endl;
+
+    ClassB::Address();
+    std::cout << "The adress of GlobalItem in main.cpp: " << &GlobalItem << std::endl;
+}
+```
+输出结果
+```
+Global item init value : 101
+Global item init value in classB.cpp : 101
+Global item after set -13 : -13
+Global item in classB.cpp after set -1: -1
+The adress of GlobalItem in ClassB.cpp: 00007FF6A14ED00C
+The adress of GlobalItem in main.cpp: 00007FF6A14ED008
+```
+这说明在不同的include "StaticVariable.h"的.cpp文件中,有着不同的`GlobalItem`,在main函数中直接访问的`GlobalItem`和通过ClassB访问的`ClassB.cpp`中的`GlobalItem`就像是两个作用域中的同名同类型的变量一样,虽然名字和类型都相同,但并不是同一个变量(不同的作用域中可以有相同类型和名称的变量).
+
+>>>>>>> e07b896a521feaff2560dde362f54e050279d0e5
 ### this
 #### delete this
 
