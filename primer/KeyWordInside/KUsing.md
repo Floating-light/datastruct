@@ -2,6 +2,7 @@
 * [Display](#标题名,点去掉,空格改为-)
     * [15.7.1 Virtual Destructors](#1571-virtual-destructors)
 
+* QT https://blog.csdn.net/xpg4321/article/details/101278293
 # Keyword
 
 ### const
@@ -42,7 +43,7 @@ p3 = &aa;
 控制变量的存储方式和可见性.
 
 https://www.runoob.com/w3cnote/cpp-static-usage.html
-
+https://blog.csdn.net/xueyong4712816/article/details/41120595
 因为函数在程序运行中被调用，所以静态数据成员不能在任何函数内分配空间和初始化。
 
 ```c++
@@ -113,6 +114,16 @@ The adress of GlobalItem in main.cpp: 00007FF6A14ED008
 ### inline
 
 #### inline for virtual
+
+### enum
+https://www.runoob.com/w3cnote/cpp-enum-intro.html
+1. 枚举变量可以直接输出，但不能直接输入。如：cout >> color3;   //非法
+2. 不能直接将常量赋给枚举变量。如：  color1=1; //非法
+3. 不同类型的枚举变量之间不能相互赋值。如： color1=color3;  //非法
+4. 枚举变量的输入输出一般都采用switch语句将其转换为字符或字符串；枚举类型数据的其他处理也往往应用switch语句，以保证程序的合法性和可读性。
+
+### rvalue reference
+
 
 ### volatile
 和多线程相关
