@@ -13,9 +13,16 @@ using namespace std;
 // 对象本身的大小必须大于 4 byte
 int main()
 {
+    std::shared_ptr<int> s;
     allocator<int> alloc;alloc.allocate()
     alloc.construct()
     std::vector<int> v;
     v.push_back();
+    std::unique_ptr<int> uq = std::make_unique<int>(new int(10));
+    int * ii = new int(19);
+    uq = &ii;
+    std::shared_ptr<int> sp = std::make_shared<int>(11);
 
+    std::weak_ptr<int> wp;
+    wp.
 }
