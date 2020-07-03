@@ -24,5 +24,6 @@ int main()
     std::shared_ptr<int> sp = std::make_shared<int>(11);
 
     std::weak_ptr<int> wp;
-    wp.
+    std::vector<int> vv;
+    vv.begin();
 }

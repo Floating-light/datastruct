@@ -189,6 +189,27 @@ int main()
 }
 ```
 ### 四种智能指针
+https://www.cnblogs.com/WindSun/p/11444429.html
+#### auto_ptr
+本意是维持对一个指针变量的唯一所有权,在auto_ptr超出作用域之后自动在其析构函数中delete这个指针变量。
+（C++98的方案，C++11已经抛弃）采用所有权模式。
+```c++
+auto_ptr<string> p1 (new string ("I reigned lonely as a cloud.")); 
+auto_ptr<string> p2; 
+p2 = p1; //auto_ptr不会报错.p1失去了所有权.再尝试通过p1访问指针会直接崩溃.
+```
+此时不会报错，p2剥夺了p1的所有权，但是当程序运行时访问p1将会报错。所以auto_ptr的缺点是：存在潜在的内存崩溃问题！
+#### unique_ptr
+严格独占或拥有指针，保证同一时间仅有一个智能指针指向该对象。
+
+相较于`auto_ptr`,它的赋值操作,拷贝构造，都是delete的。但是允许`move`操作。
+### shared_ptr
+和上面的独占机制不同, `shared_ptr`提供了多个智能指针指向同一对象的管理机制。
+### vector
+
+vector<T>本身相当于有四个成员变量: begin, end, capacity, allocator的类.用于表示连续内存空间的起始和容量,以及内存分配器.
+
+https://stackoverflow.com/questions/17299951/c-vector-what-happens-whenever-it-expands-reallocate-on-stack
 
 ### struct 和 typedef struct
 
