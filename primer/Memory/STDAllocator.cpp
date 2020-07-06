@@ -26,4 +26,5 @@ int main()
     std::weak_ptr<int> wp;
     std::vector<int> vv;
     vv.begin();
+    vv.pop_back()
 }
