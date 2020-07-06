@@ -12,6 +12,7 @@ void myFree(void* ptr)
 {
     return free(ptr);
 }
+// 全局operator new 重载
 // 不能用cout, 在程序初始化的时候就会调用new， delete,这时ostream还没初始化好。
 inline void* operator new(size_t size)
 {
