@@ -135,7 +135,12 @@ https://www.runoob.com/w3cnote/cpp-enum-intro.html
 ### rvalue reference
 
 ### volatile
-和多线程相关
+双检查锁的单例中，单例变量的类型可以是ｖｏｌａｔｉｌｅ,以防止内存ｒｅｏｒｄｅｒ
+volatile int i = 10; 
+volatile 关键字是一种类型修饰符，用它声明的类型变量表示可以被某些编译器未知的因素（操作系统、硬件、其它线程等）更改。所以使用 volatile 告诉编译器不应对这样的对象进行优化。
+volatile 关键字声明的变量，每次访问时都必须从内存中取出值（没有被 volatile 修饰的变量，可能由于编译器的优化，从 CPU 寄存器中取值）
+const 可以是 volatile （如只读的状态寄存器）
+指针可以是 volatile
 
 ### assert()
 
@@ -218,7 +223,8 @@ https://stackoverflow.com/questions/17299951/c-vector-what-happens-whenever-it-e
 ### union
 
 ### explicit
-
+explicit 修饰构造函数时，可以防止隐式转换和复制初始化
+explicit 修饰转换函数时，可以防止隐式转换，但 按语境转换 除外
 ### implement c++ class in c languge
 
 ### friend
@@ -230,7 +236,26 @@ https://stackoverflow.com/questions/17299951/c-vector-what-happens-whenever-it-e
 ### enum 
 
 ### decltype
+decltype 关键字用于检查实体的声明类型或表达式的类型及值分类。语法：
 
+decltype ( expression )
+decltype 使用
+```c++
+// 尾置返回允许我们在参数列表之后声明返回类型
+template <typename It>
+auto fcn(It beg, It end) -> decltype(*beg)
+{
+    // 处理序列
+    return *beg;    // 返回序列中一个元素的引用
+}
+// 为了使用模板参数成员，必须用 typename
+template <typename It>
+auto fcn2(It beg, It end) -> typename remove_reference<decltype(*beg)>::type
+{
+    // 处理序列
+    return *beg;    // 返回序列中一个元素的拷贝
+}
+```
 ### reference
 
 ### 宏
@@ -253,6 +278,22 @@ https://stackoverflow.com/questions/17299951/c-vector-what-happens-whenever-it-e
 
 ### 运行时类型信息(RTTI)
 
+## 死锁
+出现在同时使用多个锁的情况下的加锁顺序不同
+避免死锁
+评估你是否真的需要同时对多个锁加锁,尽量避免同时使用多个锁,
+避免在加锁后调用用户提供的函数。
+在使用多个锁时, 用std::lock()对多个锁加锁。
+在不可能用std::lock()时, 以同一顺序对多个锁加锁。(hierarchy of mutex)
+
+
+### condition_variable
+即信号量,
+1. 用于控制访问具有多个实例的某种资源(消息队列里的消息).
+2. 同步,控制执行的先后顺序。
+
+发现信号量不为正时，不是忙等待,而是将这个线程放到和信号量相关的等待队列中,并将该线程切换成等待状态。
+在其他线程ｓｉｎｇａｌ后，应该被重新执行，它将从等待状态变为就绪状态。
 
 
 1. 对命名空间进行权限管理

@@ -19,5 +19,6 @@ int main()
     std::shared_ptr<int> sp = std::make_shared<int>(10);
 
     std::weak_ptr<int> wp;
-    wp.
+    std::move();
+    
 }
