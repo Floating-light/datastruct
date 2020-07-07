@@ -32,7 +32,7 @@ static void operator delete(void*,size_t) = delete;
 };
 int main()
 {
-    // set_new_handler(noMoreMemory);
+    set_new_handler(noMoreMemory);
     // int* p = new int[999999999999999999];
     // // static_assert(p);
 
