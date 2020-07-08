@@ -91,7 +91,28 @@ Derived::vfunc2
 1. 子类重写的虚函数会覆盖所有父类虚函数表中的那一虚函数。
 
 
-对于菱形继承, 
+### 菱形继承
+对于菱形继承, 即是多个父类继承了同一个类(父类的父类).考虑这样一个继承结构:
+![菱形继承](./_20200708082635.png)
+实例化Derived,后如果直接访问`Base`的`bb`成员
+```c++
+Derived d;
+d.bb; // Error C2385 ambiguous access of 'bb'
+```
+由于直接父类Base1, 和Base2中都继承了`Base`, 导致`Derived`对象中有两份`Base`类的成员存在。编译器不知道访问的哪一个。
+
+或者可以用`using`在`Derived`类中指定用那一个父类的版本:
+```c++
+    using Base1::bb;
+    // using Base2::bb;
+```
+在转换到Base时, 可以先转到Base1 或Base2。
+但这毕竟不是长久之计,所以有了虚继承, 他能够防止多重继承时同一个类出现的多个拷贝:
+```c++
+class Base1 : virtual public Base{};
+class Base2 : virtual public Base{};
+```
+
 #### Warning
 * 可以通过父类型的指针访问子类的虚函数(通过虚表)
 * 访问non-public虚函数
@@ -101,3 +122,4 @@ reference:
 
 * https://coolshell.cn/articles/12165.html
 * https://coolshell.cn/articles/12176.html
+* 虚继承:https://blog.csdn.net/longlovefilm/article/details/80558879
