@@ -17,6 +17,7 @@ public:
 class Base1 : virtual public Base
 {
 public:
+    
     virtual void vfunc1() 
     {
         std::cout << "Base1::vfunc1" << std::endl;
@@ -57,6 +58,36 @@ public:
     }
     int Derived;
 };
+class QString;
+class QPixmap;
+class DownloadFlag;
+struct ModelData
+{
+    QString id;
+    QString name;
+
+    QString side;
+    QString modelType;
+    QString type;
+    QString subType;
+    QString style;
+    QString style2;
+    QString username;
+
+    std::vector<QString> labels;
+    std::vector<QString> pictures;
+
+    QString maxVersion;
+
+    double size;
+    double face;
+
+    QPixmap pixmap;
+    bool havePixmap;
+
+    DownloadFlag isDownloaded;
+};
+
 
 int main()
 {
