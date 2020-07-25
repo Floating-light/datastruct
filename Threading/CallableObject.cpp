@@ -1,6 +1,9 @@
 #include <iostream>
 #include <thread>
 #include <future>
+#include <functional>
+#include <unordered_map>
+#include <vector>
 
 using namespace std;
 
@@ -37,4 +40,7 @@ int main()
     //std::async(std::launch::async, a, 6);
     //std::bind(a, 6);
     std::call_once(a.flag, a, 6);
+    std::function<void (int, float)> sign; 
+
+    std::unordered_map<std::string, std::vector<int>> map;
 }
