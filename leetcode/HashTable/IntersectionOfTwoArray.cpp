@@ -54,40 +54,40 @@ public:
     }
 };
 
-int main()
-{
-    int set1[] = { 4,9,5,9 };
-    int set2[] = { 9,4,9,8,4,3,2,1,5 };
-    
-    sort(set1, set1+4, std::greater<int>()); // 9, 9, 5, 4
-    sort(set2, set2 + 9, std::greater<int>()); // 9, 9, 8,5, 4, 4, 3, 2, 1
-
-    std::vector<int> res;
-    if (std::includes(set2, set2 + 9, set1, set1 + 4, std::greater<int>()))
-    {
-        std::cout << "true" << std::endl;
-    }
-    else
-    {
-        std::cout << "false" << std::endl;
-    }
-    //auto itr = std::back_inserter(res);
-    /*auto itr = std::set_intersection(set1.begin(), set1.end(),
-        set2.begin(), set2.end(),
-        set1.begin(), std::greater<int>());*/
-    // 并集
-        /*auto itr = std::set_union(set2, set2 + 8,
-        set1, set1 + 4,
-        std::back_inserter(res), std::greater<int>());*/
-    
-    // 9, 9, 8, 5, 4, 4, 3, 2, 1,
-    //set1.erase(itr, set1.end());
-    //set1.resize(itr - set1.begin());
-    auto itr2 = begin(res);
-    while (itr2 != end(res))
-    {
-        std::cout << *itr2 << ", ";
-        ++itr2;
-    }
-    std::cout << std::endl;
-}
+//int main()
+//{
+//    int set1[] = { 4,9,5,9 };
+//    int set2[] = { 9,4,9,8,4,3,2,1,5 };
+//    
+//    sort(set1, set1+4, std::greater<int>()); // 9, 9, 5, 4
+//    sort(set2, set2 + 9, std::greater<int>()); // 9, 9, 8,5, 4, 4, 3, 2, 1
+//
+//    std::vector<int> res;
+//    if (std::includes(set2, set2 + 9, set1, set1 + 4, std::greater<int>()))
+//    {
+//        std::cout << "true" << std::endl;
+//    }
+//    else
+//    {
+//        std::cout << "false" << std::endl;
+//    }
+//    //auto itr = std::back_inserter(res);
+//    /*auto itr = std::set_intersection(set1.begin(), set1.end(),
+//        set2.begin(), set2.end(),
+//        set1.begin(), std::greater<int>());*/
+//    // 并集
+//        /*auto itr = std::set_union(set2, set2 + 8,
+//        set1, set1 + 4,
+//        std::back_inserter(res), std::greater<int>());*/
+//    
+//    // 9, 9, 8, 5, 4, 4, 3, 2, 1,
+//    //set1.erase(itr, set1.end());
+//    //set1.resize(itr - set1.begin());
+//    auto itr2 = begin(res);
+//    while (itr2 != end(res))
+//    {
+//        std::cout << *itr2 << ", ";
+//        ++itr2;
+//    }
+//    std::cout << std::endl;
+//}

@@ -9,7 +9,7 @@
 ```c++
 meta=(BlueprintSpawnableComponent)
 ```
-
+# All thing entry: https://www.zhihu.com/question/356772225/answer/906182193
 # Engine framework - Introduce and theory
 1. some.uproject
 some.uproject中包含
@@ -25,14 +25,31 @@ https://github.com/Allar/ue4-style-guide
 - ContentBrowserExtensions.cpp, Line 222
 通过原始c++函数指针创建全局函数委托
 ```c++
-TBaseDelegate::CreateStatic(&FPaperContentBrowserExtensions_Impl::ExecuteSelectedContentFunctor, StaticCastSharedPtr<FContentBrowserSelectedAssetExtensionBase>(SpriteCreatorFunctor))
+TBaseDelegate::CreateStatic(&FPaperContentBrowserExtensions_Impl::ExecuteSelectedContentFunctor, StaticCastSharedPtr<FContentBrowserSelectedAssetExtensionBase>(SpriteCreatorFunctor));
 ```
+- 参数绑定:
+```c++
+// 函数原型:
+static void CreateSpriteActionsSubMenu(FMenuBuilder& MenuBuilder, TArray<FAssetData> SelectedAssets);
+// 所有类型委托的基类
+// 将第二个参数绑定为一个本地的变量.
+TBaseDelegate::CreateStatic(&FPaperContentBrowserExtensions_Impl::CreateSpriteActionsSubMenu, SelectedAssets));
+```
+3. NewEditorMode: https://github.com/AlexanderSarton/NewEditorMode
 
+4. 蓝图模板函数?不可能!用meta. https://answers.unrealengine.com/questions/742529/templatewildcard-return-type-for-blueprints.html
 - Developers floder 
 烘培时会忽略
 
+5. UBT如何使用C#中的Build内容：https://docs.unrealengine.com/en-US/Programming/BuildTools/UnrealBuildTool/ModuleFiles/index.html
 - UE_LOG
 https://www.cnblogs.com/blueroses/p/6037981.html
+
+6. TMap, TMultiMap
+- 对Key进行散列, Key必须支持GetTypeHash() 和 `==`
+- 任选分配器,`TSetAllocator`.(而不是`FHeapAllocator`和`TInlineAllocator`).指定映射应使用的散列桶的数量以及应使用哪一个标准UE4分配器来存储散列和元素。
+- KeyFuncs 最后一个TMap模板参数, 告诉映射如何从元素类型获取Key,如何比较两个Key是否相等,以及如何对Key进行散列计算
+
 
 - 字符编码问题
 在出现中文literal时,由于文本的编码错误，会导致编译器(或者是UHT)识别不了或者识别成其它字符，然后报一些莫名其妙、令人摸不着头脑的错，此时可以将文档保存为utf-8编码即可解决。
@@ -51,34 +68,12 @@ FPaths::DirectoryExists(dirs)
 - FString
 https://docs.unrealengine.com/zh-CN/Programming/UnrealArchitecture/StringHandling/index.html
 
-# FlipBook 编辑器扩展
-// D:\Program Files\Epic Games\UE_4.25\Engine\Plugins\2D\Paper2D\Source\Paper2DEditor\Private\ContentBrowserExtensions\ContentBrowserExtensions.cpp
-// line: 227
-全文搜索`Create Sprite`找到创建`Sprite`的地方.
-![CreateSprite](./CreateSpriteEntry.png)
-```c++
-MenuBuilder.AddMenuEntry(
-	LOCTEXT("CB_Extension_Texture_CreateSprite", "Create Sprite"),
-	LOCTEXT("CB_Extension_Texture_CreateSprite_Tooltip", "Create sprites from selected textures"),
-	FSlateIcon(PaperStyleSetName, "AssetActions.CreateSprite"),
-	Action_CreateSpritesFromTextures,
-	NAME_None,
-	EUserInterfaceActionType::Button);
-```
-第四个参数应该就是创建`Sprite`的动作执行的地方。
-```c++
-FUIAction Action_CreateSpritesFromTextures(
-			FExecuteAction::CreateStatic(&FPaperContentBrowserExtensions_Impl::ExecuteSelectedContentFunctor, StaticCastSharedPtr<FContentBrowserSelectedAssetExtensionBase>(SpriteCreatorFunctor)));
-```
-创建一个可执行的委托，并绑定参数，返回的委托没有参数。这里函数`FPaperContentBrowserExtensions_Impl::ExecuteSelectedContentFunctor`的参数绑定为`StaticCastSharedPtr<FContentBrowserSelectedAssetExtensionBase>(SpriteCreatorFunctor)`，再返回一个无参数的可执行对象，相当于做了一次参数绑定。
-而`ExecuteSelectedContentFunctor`只是简单地调用参数`FContentBrowserSelectedAssetExtensionBase`的`Execute()`函数。
-```c++
-TSharedPtr<FCreateSpriteFromTextureExtension> SpriteCreatorFunctor = MakeShareable(new FCreateSpriteFromTextureExtension());
-SpriteCreatorFunctor->SelectedAssets = SelectedAssets;
-```
-所以当点击创建`Sprite`时,会将选中的资源`TArray<FAssetData> SelectedAssets`赋给`SpriteCreatorFunctor->SelectedAssets`，并直接调用到`SpriteCreatorFunctor->Execute()`,
-
-// 获取烘培纹理
+# 获取烘培纹理
 // D:\Program Files\Epic Games\UE_4.25\Engine\Plugins\2D\Paper2D\Source\Paper2D\Classes\PaperSprite.h
 // line: 296
 //	UTexture2D* GetBakedTexture() const;
+
+# 实例化各种东西
+
+com = NewObject<UStaticMeshComponent>(this, TEXT("ffff"));
+	AddInstanceComponent(com);

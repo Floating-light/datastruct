@@ -43,4 +43,9 @@ int main()
     std::function<void (int, float)> sign; 
 
     std::unordered_map<std::string, std::vector<int>> map;
+    int i = 0;
+    new(&i) int(11);
+    printf(i);
+
+    
 }
