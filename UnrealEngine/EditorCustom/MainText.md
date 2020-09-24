@@ -7,7 +7,7 @@
 
 因此, 我们需要更快捷的方式！
 
-### 1. 创建资产类——UObject
+## 1. 创建资产类——UObject
 我们可以将这种资源的表示抽象为一个`UTexturePlayer`类, 显然它派生自`UObject`,这样就可以在编辑器中对它进行管理.
 
 ```c++
@@ -25,12 +25,12 @@ public:
     // other play function ... ...
 };
 ```
-### 2. 创建资产对应的工厂——UFactory
+## 2. 创建资产对应的工厂——UFactory
 UE的`Editor`中, 创建资源通常都是通过`UFactory`, 对每一个希望在编辑器的`ContentBrowser`中创建的资源, 都必须实现一个对应的`UFactory`.
 
 ```c++
 /**
- * Implements a factory for UTextAsset objects.
+ * Implements a factory for TexturePlayer objects.
  */
 UCLASS(hidecategories=Object)
 class UTexturePlayerFactoryNew
@@ -65,7 +65,7 @@ UObject* UTexturePlayerFactoryNew::FactoryCreateNew(UClass* InClass, UObject* In
 ```
 由于`UFactory`是派生自`UObject`的，所以我们不必手动注册它, 编辑器会自动搜集所有的`Factory`。
 
-### 3. 定义资产在编辑器中的外观——IAssetTypeActions
+## 3. 定义资产在编辑器中的外观——IAssetTypeActions
 `IAssetTypeActions`主要定义和这种资产本身相关的东西, 比如缩略图, 颜色, 分类 以及 在`ContentBrowser`中右键单击它的`Action`菜单.同时,引擎实现好了一个符合大多数资产行为的基类`FAssetTypeActions_Base`,我们可以从它派生, 以减少代码量.
 
 ```c++
@@ -142,7 +142,7 @@ void FTexturePlayerAssetActions::OpenAssetEditor(const TArray<UObject*>& InObjec
 此外, 也可以用自定义的编辑器,这个稍后再说.
 与`Factory`不同的是,`FTexturePlayerAssetActions`及其父类是纯`C++`(从其前缀`F`也可以看出), 引擎是无法自动搜集它的, 所以需要手动注册.
 
-### 3. 注册AssetAction
+## 4. 注册AssetAction
 
 通常来讲,我们需要将一种资产的`UObject`与其相关的`Editor`部分分开, 因为在打包好的程序中是不会有`Editor`部分的.由此我们需要定义两个模块, 一个用来定义`UTexturePlayer`极其核心功能部分(控制播放逻辑),另一个用来定义编辑器中的辅助工具,`Factory`, `IAssetTypeActions`, 自定义编辑器和`Details`面板等, 假设我们定义`UTexturePlayer`的模块名为`TexturesPlayer`,其对应的编辑器工具模块通常叫`TexturePlayerEditor`, 且定义在同一个插件中.
 
@@ -171,7 +171,7 @@ void FTexturePlayerEditor::RegisterAssetTools()
 	EAssetTypeCategories::Type MyAssetType = AssetTools.RegisterAdvancedAssetCategory(FName("IdeamakeCustomCategory"), NSLOCTEXT("Ideamake", "Ideamake_Inc", "Ideamake"));
 		
 	// Create Asset actions
-	TSharedRef<IAssetTypeActions> Action = MakeShareable(new FSpritePlayerAssetActions(MyAssetType));
+	TSharedRef<IAssetTypeActions> Action = MakeShareable(new FTexturePlayerAssetActions(MyAssetType));
 
 	// Register Asset action
 	AssetTools.RegisterAssetTypeActions(Action);
@@ -189,14 +189,110 @@ void FCharlesFrameWorkEditorModule::StartupModule()
 ```
 其中`FIdeamakeStyle::Initialize()`注册了自定义图标.
 至此我们可以在`ContentBrowser`空白处右键单击,就可以看到我们自定义的分类以及我们的`TexturePlayer`创建的按钮.
+
 ![AssetTypeAction](./AssetTypeAction.png)
 
+双击创建出来的资源图标就可以进入到一个简单的资产编辑器：
+
+![AssetEditor](./AssetEditor.png)
+
+如果想打开自定义的编辑器, 只需在上面`AssetTypeAction`的`OpenAssetEditor()`函数实现中打开自定义的编辑, 通常是直接实例化一个自己实现的派生自`FAssetEditorToolkit`的类, 来创建编辑这个`Object`的`Slate`界面.实现方式待下回再说.
+
+## 5. 自定义图标样式
+
+在上面的注册中提到了对自定义图标的注册:
+```c++
+FIdeamakeStyle::Initialize();
 ```
-在uplugin配置文件中, 对Runtime模块的LoadingPhase最好是PreDefault, 否则会打包失败。
+其实现主要是定义一个`FSlateStyleSet`并用`FSlateStyleRegistry::RegisterSlateStyle()`注册, 这样就可以在别的地方直接使用, 比如用作某个`Action`的图标,可以直接将以下`FSlateIcon`传进去:
 ```
-### 4. ContentBrowser扩展
-如果我们希望在点击其它资源时(Textures)创建我们的TexturesPlayer, 但又无法直接扩展Texture的AssetTypeAction(改源码?),这时可以直接扩展ContentBrowser模块的选中资源时的右键菜单, 
-https://zhuanlan.zhihu.com/p/164695117
+FSlateIcon(StyleSetName, "AssetActions.CreateSprite")
+```
+`StyleSetName`是我们注册的`StyleSet`的名字,用来标识我们的`StyleSet`,后面的字符串`AssetActions.CreateSprite`表示的是这个StyleSet中的特定的资源。
+
+```c++
+class FIdeamakeStyle
+{
+public:
+	static void Initialize();
+	static void Shutdown();
+	static TSharedPtr<class ISlateStyle> Get();
+	static FName GetStyleSetName();
+private:
+	static FString InContent(const FString& RelativePath, const ANSICHAR* Extension);
+private:
+	static TSharedPtr<class FSlateStyleSet> StyleSet;
+};
+
+#include "IdeamakeStyle.h"
+
+#include "Interfaces/IPluginManager.h"
+#include "SlateStyleRegistry.h"
+#include "SlateOptMacros.h"
+
+TSharedPtr<FSlateStyleSet> FIdeamakeStyle::StyleSet = nullptr;
+TSharedPtr<class ISlateStyle> FIdeamakeStyle::Get() { return StyleSet; }
+
+FString FIdeamakeStyle::InContent(const FString& RelativePath, const ANSICHAR* Extension)
+{
+	static FString ContentDir = IPluginManager::Get().FindPlugin(TEXT("MyPluginName"))->GetContentDir();
+	return (ContentDir / RelativePath) + Extension;
+}
+
+FName FIdeamakeStyle::GetStyleSetName()
+{
+	static FName IdeamakeStyleName(TEXT("IdeamakeStyle"));
+	return IdeamakeStyleName;
+}
+
+BEGIN_SLATE_FUNCTION_BUILD_OPTIMIZATION
+
+void FIdeamakeStyle::Initialize()
+{
+	const FVector2D Icon16x16(16.0f, 16.0f);
+	const FVector2D Icon32x32(32.0f, 32.0f);
+	const FVector2D Icon64x64(64.0f, 64.0f);
+
+	if (StyleSet.IsValid())
+	{
+		return;
+	}
+
+	StyleSet = MakeShareable(new FSlateStyleSet(GetStyleSetName()));
+	StyleSet->SetContentRoot(FPaths::EngineContentDir() / TEXT("Editor/Slate"));
+	StyleSet->SetCoreContentRoot(FPaths::EngineContentDir() / TEXT("Slate"));
+
+	FSlateImageBrush* ThisH = new FSlateImageBrush(InContent("Icon/TigerHead", ".png"), Icon64x64);
+	FSlateImageBrush* ThisH1 = new FSlateImageBrush(InContent("Icon/File", ".png"), Icon64x64);
+	FSlateImageBrush* ThisH2 = new FSlateImageBrush(InContent("Icon/Screen", ".png"), Icon64x64);
+
+	StyleSet->Set("Ideamake.NewUMGState", ThisH);
+	StyleSet->Set("ClassThumbnail.SpritePlayer", ThisH1);
+	StyleSet->Set("ClassThumbnail.FlipImageBook", ThisH2);
+
+	FSlateStyleRegistry::RegisterSlateStyle(*StyleSet.Get());
+}
+END_SLATE_FUNCTION_BUILD_OPTIMIZATION
+
+void FIdeamakeStyle::Shutdown()
+{
+	if (StyleSet.IsValid())
+	{
+		FSlateStyleRegistry::UnRegisterSlateStyle(*StyleSet.Get());
+		ensure(StyleSet.IsUnique());
+		StyleSet.Reset();
+	}
+}
+```
+在使用时:
+```c++
+FSlateIcon(FIdeamakeStyle::GetStyleSetName(), "Ideamake.NewUMGState")
+```
+其中以`ClassThumbnail`为前缀的图标,会自动匹配后面的类名(去掉各种U,A前缀)成为这个类显示在ContentBrowser中的图标.
+
+## 6. ContentBrowser扩展
+
+如果我们希望在点击其它资源时(Textures)创建我们的TexturesPlayer, 但又无法直接扩展Texture的AssetTypeAction(改源码?),这时可以直接扩展ContentBrowser模块的选中资源时的右键菜单, 参考之前的一篇文章:https://zhuanlan.zhihu.com/p/164695117
 
 Summary:
 * 声明资产类型的C++类, 通常继承自UObject.
@@ -205,10 +301,20 @@ Summary:
 * 特定资产的ContentBrowser actions.即右键菜单.
 * TODO: 对复杂Asset类型,自定义Asset编辑器UI.
 
+![Summary](./Summary.png)
 
 reference:
 * https://learn.unrealengine.com/course/2504894?r=False&ts=637365057953224512
 * PPT: https://www.slideshare.net/GerkeMaxPreussner/fmx-2017-extending-unreal-engine-4-with-plugins-master-class
+* Engine\Plugins\2D\Paper2D\Source\Paper2DEditor\Private\Paper2DEditorModule.cpp
 
 Toolkits:
 * Engine\Plugins\2D\Paper2D\Source\Paper2DEditor\Private\SpriteEditor\SpriteEditor.h
+* Engine\Source\Editor\Kismet\Public\BlueprintEditor.h
+
+自定义:FSlateStyleSet
+* Engine\Plugins\2D\Paper2D\Source\Paper2DEditor\Private\PaperStyle.cpp
+
+```
+在uplugin配置文件中, 对Runtime模块的LoadingPhase最好是PreDefault, 否则会打包失败。
+```
