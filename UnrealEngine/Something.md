@@ -77,3 +77,13 @@ https://docs.unrealengine.com/zh-CN/Programming/UnrealArchitecture/StringHandlin
 
 com = NewObject<UStaticMeshComponent>(this, TEXT("ffff"));
 	AddInstanceComponent(com);
+
+# GC 错误
+```
+The  Game has crashed and will close
+```
+多半是没加UPEOPERTY(), 在所有引用了UObject对象的属性上都要加UPROPERTY().指针一定要初始化为nullptr.
+
+# Project Config modify in runtime
+ https://answers.unrealengine.com/questions/606337/config-not-being-saved-uproperty-uclass.html
+ 
