@@ -229,13 +229,202 @@ GameplayEffectSpecs可以用UAbilitySystemComponent::MakeOutgoingSpec().直接
 用传进来的GE的TSubclassOf的GetDefaultObject()作为GE, 这也暗示了GE是
 不能在Runtime下改变的,否则一个地方改了, 其它地方都会受到影响.
 
-通常可以把从一个Ability创建的GE传给Projectile, Projectile在稍后将其应用到击中
-的对象上.当GE成功应用时, 会返回一个新的结构体: FActiveGameplayEffect.
+通常可以把从一个Ability创建的GES传给Projectile, Projectile在稍后将其应用到击中
+的对象上.当GES成功应用时, 会返回一个新的结构体: FActiveGameplayEffect.
 
+* 有从GE创建的Class.
+* GEC 的level, 通常和创建它的Ability一样, 也可以不一样
+* GESpec 的Duration,默认和GE的一样, 也可以不一样, Period也是如此.
+* GESpec stack limit 在GE上.
+* GameplayEffectContextHandle告诉我们谁创建了这个GESpec.
+* 在创建这个GESpec时是用snapshotting的方式捕获Attributes.
+* DynamicGrantedTags 是GESpec授予目标的除了GE的GameplayTags 之外的额外的Tags.同样DynamicAssetTags也是.
+* SetByCaller TMaps.
 #### 4.5.9.1 SetByCallers
+允许GESpec carry 和GameplayTag或FName关联的float值,通过TMap,  TMap<FGameplayTag, float>, TMap<FName, float>。
+通常可被用作GE上的Modifiers, 或通用的过渡浮点值。 被普遍地用于通过SetByCallers传
+递Ability中产生的数字数据给GameplayEffectExecutionCalculations或
+ModifierMagnitudeCalculations.
 
+蓝图中可在GESpec上用AssignTagSetbyCallerMagnitude或AssignSetbyCallerMagnitude设置.
+get节点需要自己实现.
 
+C++中:
+```c++
+void FGameplayEffectSpec::SetSetByCallerMagnitude(FName DataName, float Magnitude);
+void FGameplayEffectSpec::SetSetByCallerMagnitude(FGameplayTag DataTag, float Magnitude);
+float GetSetByCallerMagnitude(FName DataName, bool WarnIfNotFound = true, flaot DefaultIfNotFound = 0.f) const;
+float GetSetByCallerMagnitude(FGameplayTag DataTag, bool WarnIfNotFound = true, float DefaultIfNotFound = 0.f) const;
+```
+通常建议使用GameplayTag, 可以阻止拼写错误, 而且GameplayTags在网络传输时也更高效.
 
+### 4.5.10 Gameplay Effect Context
+GameplayEffectContext结构体持有GESpec的instigator和TargetData的信息. 
+这也是一个好地方通过子类化它, 来在ModifierMagnitudeCalculations,
+GameplayEffectExecutionCalculations,AttributeSets 和 GameplayCues之间传递任意数据.
+
+1. Subclass FGameplayEffectContext
+2. Override FGameplayEffectContext::GetScriptStruct()
+3. Override FGameplayEffectContext::Duplicate()
+4. Override FGameplayEffectContext::NetSerialize() if your new data nedds to be replicated.
+5. Implement TStructOpsTypeTraites for your subclass, like the parent struct 
+FGameplayEffectContext has.
+6. Override AllocGameplayEffectContext() in your AbilitySystemGlobals class to return
+a new object of your subclass.
+
+### 4.5.11 Modifier Magnitude Calculation
+
+`ModifierMagnitudeCalculations`(MMC)通常在GE中用作Modifiers,它和
+GameplayEffectExecutionCalculations差不多,但是没那么强大但可以被预测.其主要目的
+是在CalculateBaseMagnitude_Implementation中返回一个浮点数.
+```c++
+/** Magnitude value represented by a custom calculation class */
+UPROPERTY(EditDefaultsOnly, Category=Magnitude)
+FCustomCalculationBasedFloat CustomMagnitude;
+```
+可以被用于任何类型的GE.MMC可以捕获任意数量的在GE的Source或Target上的Attributes, 
+并且有完全的对GESpec的GameplayTags和SetByCallers的访问权限。这些Attribute可以在
+创建时捕获也可以在应用或自动更新(Infinite, Duration)时计算.
+
+MMC的计算结果可以被GE的Modifier用系数或加减进一步修改.
+
+MMC捕获Target的mana属性,并因为poison effect, 需要扣除目标的mana.扣除数量依赖于目标的
+mana值和它拥有的tag.
+
+```c++
+UPAMMC_PoisonMana::UPAMMC_PoisonMana()
+{
+
+	//ManaDef defined in header FGameplayEffectAttributeCaptureDefinition ManaDef;
+	ManaDef.AttributeToCapture = UPAAttributeSetBase::GetManaAttribute();
+	ManaDef.AttributeSource = EGameplayEffectAttributeCaptureSource::Target;
+	ManaDef.bSnapshot = false;
+
+	//MaxManaDef defined in header FGameplayEffectAttributeCaptureDefinition MaxManaDef;
+	MaxManaDef.AttributeToCapture = UPAAttributeSetBase::GetMaxManaAttribute();
+	MaxManaDef.AttributeSource = EGameplayEffectAttributeCaptureSource::Target;
+	MaxManaDef.bSnapshot = false;
+
+	RelevantAttributesToCapture.Add(ManaDef);
+	RelevantAttributesToCapture.Add(MaxManaDef);
+}
+
+float UPAMMC_PoisonMana::CalculateBaseMagnitude_Implementation(const FGameplayEffectSpec & Spec) const
+{
+	// Gather the tags from the source and target as that can affect which buffs should be used
+	const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();
+	const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
+
+	FAggregatorEvaluateParameters EvaluationParameters;
+	EvaluationParameters.SourceTags = SourceTags;
+	EvaluationParameters.TargetTags = TargetTags;
+
+	float Mana = 0.f;
+	GetCapturedAttributeMagnitude(ManaDef, Spec, EvaluationParameters, Mana);
+	Mana = FMath::Max<float>(Mana, 0.0f);
+
+	float MaxMana = 0.f;
+	GetCapturedAttributeMagnitude(MaxManaDef, Spec, EvaluationParameters, MaxMana);
+	MaxMana = FMath::Max<float>(MaxMana, 1.0f); // Avoid divide by zero
+
+	float Reduction = -20.0f;
+	if (Mana / MaxMana > 0.5f)
+	{
+		// Double the effect if the target has more than half their mana
+		Reduction *= 2;
+	}
+	
+	if (TargetTags->HasTagExact(FGameplayTag::RequestGameplayTag(FName("Status.WeakToPoisonMana"))))
+	{
+		// Double the effect if the target is weak to PoisonMana
+		Reduction *= 2;
+	}
+	
+	return Reduction;
+}
+```
+如果没有在构造函数中将`FGameplayEffectAttributeCaptureDefinition`添加到RelevantAttributesToCapture,在尝试捕获Attributes时,
+或得到关于missing Spec的错误.如果不需要捕获属性, 则不必向RelevantAttributesToCapture中添加任何东西.
+
+### 4.5.12 Gmaeplay Effect Execution Calculation
+GameplayEffectExecutionCalculation.h
+
+这几乎是GE中最强大的方式去修改一个ASC.和上面一样,它也可以捕获属性和可选的快照捕获方式.
+不同的是它可以改变不止一个属性, 并且做任何你想做的事情。为达此目的的代价就是不能预测,
+且必须用c++ 实现.
+
+ExecutionCalculations 仅可被用于instant 和 Periodic GameplayEffects. 任何带有
+Execute的， 通常都指这两种类型的GE.
+
+Snapshotting 在GESpec创建时捕获属性, not Snapshotting 在GESpec应用时捕获. 
+捕获一个属性会从他们的ASC上的mods重新计算它们的CurrentValue, 但不会运行AbilitySet中的PreAttributeChange().
+
+参考Epic's ActionRPG样例工程, 可以通过定义一个结构体 保存或定义 如何捕获Attributes,并在其构造函数中创建它的一份copy.对每一个ExecCalc都要有一个这样的结构体.每一个结构体的名字都要是唯一的, 同一个名字会导致不正确地捕获Attributes.
+
+对于Local Predicted, Sercer Only, Server Initiated GameplayAbilities, ExecCalc仅会
+在server上调用.
+
+ExecCalc的一个常用例子是基于一个复杂的计算公式和从Source和Target读取许多属性 计算承受的伤害, 样例工程中实现了一个简单的计算Damage的ExecCalc, 从GESpec的SetByCaller和从Taget捕获的armor 属性的值计算.See GDDamageExecCalculation.cpp/.h
+
+#### 4.5.12.1 Sending Data to Execution Calculations
+为了捕获Attributes, 有几种方式可以发送data给ExecutionCalculation.
+##### 4.5.12.1.1 SetByCaller
+可以直接读取设置在GESpec上的SetByCallers参数:
+```c++
+const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();
+float Damage = FMath::Max<float>(Spec.GetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.Damage")), false, -1.0f),0.0f);
+```
+##### 4.5.12.1.2 Backing Data Attribute Calculation Modifier
+如果想传一个硬编码的值给GE, 可以用CalculationModifier,它使用被捕获的属性作为backing data.
+
+![image](./calculationmodifierbackingdataattribute.png)
+
+在这个截图中, 我们将捕获的Damage Attribute加50.也可以设置成override以仅仅take
+这个硬编码值.
+
+ExecutionCalculation 在捕获这个属性时读取这个值:
+```c++
+float Damage = 0.0f;
+ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DamageStatics().DamageDef, EvaluationParameters, Damage);
+```
+##### 4.5.12.1.3 Backing Data Temporary Calculation Modifiers
+可以用使用Temporary Variable 或者 Transient Aggregator的CalculationModifier传递硬编码值给GE.Temporary Variable 与一个GameplayTag关联.
+
+下面这个截图中使用Data.Damage加了50给一个Temporary Variable.
+![Temporary](./calculationmodifierbackingdatatempvariable.png)
+
+添加backing Temporary Variables 到你的ExecutionCalculation's 构造函数上:
+```c++
+ValidTransientAggregatorIdentifiers.AddTag(FGameplayTag::RequestGameplayTag("Data.Damage"));
+```
+在ExecutionCalculation中读取:
+```c++
+float Damage = 0.0f;
+ExecutionParams.AttemptCalculateTransientAggregatorMagnitude(FGameplayTag::RequestGameplayTag("Data.Damage"), EvaluationParameters, Damage);
+```
+
+##### 4.5.12.1.4 Gameplay Effect Context
+通过GESpec上自定义的GameplayEffectContext发送data给ExecutionCalculation.
+
+在ExecutionCalculation中, 可以从FGameplayEffectCustomExecutionParameters访问EffectContext:
+```c++
+const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();
+FGSGameplayEffectContext* ContextHandle = static_cast<FGSGameplayEffectContext*>(SpecGetContext().Get());
+```
+如果需要改变GameplayEffectSpec或EffectContext上的一些东西:
+```c++
+FGameplayEffectSpec* MutableSpec = ExecutionParams.GetOwningSpecForPreExecuteMod();
+FGSGameplayEffectContext* ContextHandle = static_cast<FGSGameplayEffectContext*>(MutableSpec->GetContext().Get());
+```
+在ExecutionCalculation中修改GameplayEffectSpec的使用警告:
+```c++
+/** Non const access. Be careful with this, especially when modifying a spec after attribute capture. */
+FGameplayEffectSpec* GetOwningSpecForPreExecuteMod() const;
+```
+### 4.5.13 Custom Application Requirements
+
+CustomApplicationRequirement(CAR)  给予设计者更高级的方式控制是否GE可以被应用, 而不采用GE上简单的GameplayTag检查.可以
+通过在蓝图中override CanApplyGameplayEffect() 或在C++ 中overrride CanApplyGameplayEffect_Implementation().
 
 
 ## 4.8 Gamplay Cues
