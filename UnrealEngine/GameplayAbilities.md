@@ -423,8 +423,38 @@ FGameplayEffectSpec* GetOwningSpecForPreExecuteMod() const;
 ```
 ### 4.5.13 Custom Application Requirements
 
-CustomApplicationRequirement(CAR)  给予设计者更高级的方式控制是否GE可以被应用, 而不采用GE上简单的GameplayTag检查.可以
-通过在蓝图中override CanApplyGameplayEffect() 或在C++ 中overrride CanApplyGameplayEffect_Implementation().
+CustomApplicationRequirement(CAR)  给予设计者更高级的方式控制是否GE可以被应用, 而不采用GE上简单的GameplayTag检查.可以通过在蓝图中override CanApplyGameplayEffect() 或在C++ 中overrride CanApplyGameplayEffect_Implementation().
+
+用例:
+* 需要Target的一个属性有特定的值。
+* Target需要有一个GE的特定数量的栈.
+* 是否Target上已经有一个这个GE的实例
+* 改变已存在的实例的duration(而不是应用一个新的实例)
+
+4.5.14 Cost Gameplay Effect 
+可选地, GameplayAbilities有一个特别设计的GE用于Ability的cost.Costs就是为了能够激活一个GameplayAbility, ASC必须有的一个属性值的量.如果GA不能承担GE的Cost, 它就不能激活。这个Cost GE 必须是一个带有一个或多个从Attributes减去值的Modifiers的Instant GameplayEffect.
+默认地, Cost GEs是可预测的, 并且为了保持这一功能不建议使用ExecutionCalculations. 对于复杂的Cost Calculations,MMC是一种完全可接受的且完美的方式.
+
+开始时, 可能对每一个有Cost的GA都要有一个unique的Cost GE.更高级的方式是对不同的GAs重用Cost GE, 仅仅是修改从这个Cost GE创建的GESPec(用GA特定的数据, Cost值定义在GA上)。仅对Instanced abilities 有效.
+
+两个重用Cost GE的技术:
+1. 使用MMC, 这是最简单的方式. 创建一个MMC, 从GameplayEffectSpec获取到GameplayAbility实例，从中读取到Cost值. 
+```c++
+float UPGMMC_HeroAbilityCost::CalculateBaseMagnitude_Implementation(const FGameplayEffectSpec& Spec) const 
+{
+	const UPGGameplayAbility* Ability = Cast<UPGGameplayAbility>(Spec.GetContext().GetAbilityInstance_NotReplicated());
+	if(!Ability){
+		return 0.0f;
+	}
+	return Ability->Cost.GetValueAtLevel(Ability->GetAbilityLevel());
+}
+```
+其中, Cost value 是GameplayAbility子类中的FScalableFloat
+```c++
+UPROPERTY(BleuprintReadOnly, EditAnywhere, Category = "Cost")
+FScalableFloat Cost;
+```
+
 
 
 ## 4.8 Gamplay Cues
