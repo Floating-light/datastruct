@@ -454,7 +454,11 @@ float UPGMMC_HeroAbilityCost::CalculateBaseMagnitude_Implementation(const FGamep
 UPROPERTY(BleuprintReadOnly, EditAnywhere, Category = "Cost")
 FScalableFloat Cost;
 ```
+![costmmc](./costmmc.png)
+2. 重载UGameplayAbility::GetCostGameplayEffect().可以在运行时创建一个GE从读取GA上的CostValue.
 
+### 4.5.15 Cooldown Gameplay Effect
+同样, GA也有一个用于cooldown的可选的特殊GE设计,Cooldowns决定了一个ability激活后要过多久才能再次激活.Cooldown GE应该是Duration GE, 没有Modifiers, 每一个GA(或ability slot)都应该有一个唯一GameplayTag的 cooldown GE. (如果你的game 有可交替的分配到一个slot的ability, 且共享一个cooldown).
 
 
 ## 4.8 Gamplay Cues
