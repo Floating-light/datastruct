@@ -458,10 +458,129 @@ FScalableFloat Cost;
 2. 重载UGameplayAbility::GetCostGameplayEffect().可以在运行时创建一个GE从读取GA上的CostValue.
 
 ### 4.5.15 Cooldown Gameplay Effect
-同样, GA也有一个用于cooldown的可选的特殊GE设计,Cooldowns决定了一个ability激活后要过多久才能再次激活.Cooldown GE应该是Duration GE, 没有Modifiers, 每一个GA(或ability slot)都应该有一个唯一GameplayTag的 cooldown GE. (如果你的game 有可交替的分配到一个slot的ability, 且共享一个cooldown).
+同样, GA也有一个用于cooldown的可选的特殊GE设计,Cooldowns决定了一个ability激活后要过多久才能再次激活.Cooldown GE应该是Duration GE, 没有Modifiers, 每一个GA(或ability slot)都应该有一个唯一GameplayTag在cooldown GE 的GrantedTags. (如果你的game 有可交替的分配到一个slot的ability, 且共享一个cooldown).GA实力上会检查Cooldown Tag是否存在。默认地, Cooldowns GE是可预测的, 并且建议维持这一性质, 所以不要使用ExecutionCalculations.  对于复杂的Cooldowns Calculations,MMC是一种完全可接受的且完美的方式.
+
+开始时, 可能每一个GA都有一个独一无二的Cooldown GE. 也可以多个GA用同一个Cooldown GE, 仅仅是从这个GE 创建 GESpec时用特定GA的数据修改一下这个GESpec(Cooldown duration 和 Cooldown Tag定义在GA中.).仅对Instanced Abilities有效.
+
+重用Cooldown GE的两种方式:
+1. 使用SetByCaller.这是最简单的方式. 通过一个GameplayTag设置共享Cooldown GE的Duration到SetByCaller.在GA子类中, 为duration定义一个float / FScalableFloat,为unique Cooldown Tag定义一个FGmaeplayTagContainer, 和一个临时的FGameplayTagContainer,用于一个返回的pointer,持有Colldown Tag和Cooldown GE's Tag.
+```c++
+UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Cooldown")
+FScalableFloat CooldownDuration;
+
+UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Cooldown")
+FGameplayTagContainer CooldownTags;
+
+// Temp container that we will return the pointer to in GetCooldownTags().
+// This will be a union of our CooldownTags and the Cooldown GE's cooldown tags.
+UPROPERTY()
+FGameplayTagContainer TempCooldownTags;
+```
+然后重载UGameplayAbility::GetCooldownTags()返回Cooldown Tags和任何存在的Cooldown GE's tags.
+```c++
+const FGameplayTagContainer * UPGGameplayAbility::GetCooldownTags() const
+{
+	FGameplayTagContainer* MutableTags = const_cast<FGameplayTagContainer*>(&TempCooldownTags);
+	const FGameplayTagContainer* ParentTags = Super::GetCooldownTags();
+	if (ParentTags)
+	{
+		MutableTags->AppendTags(*ParentTags);
+	}
+	MutableTags->AppendTags(CooldownTags);
+	return MutableTags;
+}
+```
+最终, 重载UGameplayAbility::ApplyCooldown()注入我们的CooldownTags到Cooldown Gameplay GameplayEffectSpec.
+```c++
+void UPGGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo * ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	UGameplayEffect* CooldownGE = GetCooldownGameplayEffect();
+	if (CooldownGE)
+	{
+		FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(CooldownGE->GetClass(), GetAbilityLevel());
+		SpecHandle.Data.Get()->DynamicGrantedTags.AppendTags(CooldownTags);
+		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
+	}
+}
+```
+```c++
+float UPGMMC_HeroAbilityCooldown::CalculateBaseMagnitude_Implementation(const FGameplayEffectSpec & Spec) const
+{
+	const UPGGameplayAbility* Ability = Cast<UPGGameplayAbility>(Spec.GetContext().GetAbilityInstance_NotReplicated());
+
+	if (!Ability)
+	{
+		return 0.0f;
+	}
+
+	return Ability->CooldownDuration.GetValueAtLevel(Ability->GetAbilityLevel());
+}
+```
+![cooldownmmc](./cooldownmmc.png)
+
+4.5.15.1 Get the Cooldown Gameplay Effect'Remaining Time
+```c++
+bool APGPlayerState::GetCooldownRemainingForTag(FGameplayTagContainer CooldownTags, float & TimeRemaining, float & CooldownDuration)
+{
+	if (AbilitySystemComponent && CooldownTags.Num() > 0)
+	{
+		TimeRemaining = 0.f;
+		CooldownDuration = 0.f;
+
+		FGameplayEffectQuery const Query = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags);
+		TArray< TPair<float, float> > DurationAndTimeRemaining = AbilitySystemComponent->GetActiveEffectsTimeRemainingAndDuration(Query);
+		if (DurationAndTimeRemaining.Num() > 0)
+		{
+			int32 BestIdx = 0;
+			float LongestTime = DurationAndTimeRemaining[0].Key;
+			for (int32 Idx = 1; Idx < DurationAndTimeRemaining.Num(); ++Idx)
+			{
+				if (DurationAndTimeRemaining[Idx].Key > LongestTime)
+				{
+					LongestTime = DurationAndTimeRemaining[Idx].Key;
+					BestIdx = Idx;
+				}
+			}
+
+			TimeRemaining = DurationAndTimeRemaining[BestIdx].Key;
+			CooldownDuration = DurationAndTimeRemaining[BestIdx].Value;
+
+			return true;
+		}
+	}
+
+	return false;
+}
+```
+Note: 只有能够接受复制的GE才能在客户端上查询cooldown的剩余时间.这依赖于他们的replication mode.
+
+4.5.15.2 Listenning for Cooldown Begin and End
+有两种方法可以监听Cooldown开始, 绑定函数到AbilitySystemComponent->OnActiveGameplayEffectAddedDelegateTOSelf会在Cooldown GE Apply时调用. 或者GE被added的时候调用, 通过AbilitySystemComponent->RegisterGmaeplayTagEvent(CooldownTag, EGameplayTagEventType::NewOrRemoved). 建议监听GE Added, 以为这时也可以访问添加这个标签的GameplayEffectSpec.这里你可以判定Cooldown GE 是locally predicted 还是Server's。
+
+同样对称地, 监听End也有两种方法:
+```c++
+// 1. 
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnGivenActiveGameplayEffectRemoved, const FActiveGameplayEffect&);
+
+/** Called when any gameplay effects are removed */
+FOnGivenActiveGameplayEffectRemoved& OnAnyGameplayEffectRemovedDelegate();
+
+// 2. 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGameplayEffectTagCountChanged, const FGameplayTag, int32);
+/** Allow events to be registered for specific gameplay tags being added or removed */
+FOnGameplayEffectTagCountChanged& RegisterGameplayTagEvent(FGameplayTag Tag, EGameplayTagEventType::Type EventType=EGameplayTagEventType::NewOrRemoved);
+```
+建议监听Cooldown Tag移除的事件,因为当服务端校正的Cooldown GE复制过来时, 将会移除我们本地预测的这个, 即使仍然在colldown中, 也会造成OnAnyGameplayEffectRemovedDelegate()调用.Cooldown tag 在predicted colldown移除和Server's被校正的Colldown GE的应用之间不会改变.
+
+Note: 在Client上监听GE的添加或移除, 要求他们可以接受GE复制. 而这依赖于ASC's replication mode.
+
+Sample Project实现了一个自定义蓝图节点监听Cooldown的开始和结束.HUD Widget用它更新cooldown的剩余时间.这个异步任务将会永远存在, 除非手动调用EndTask(),可以在UMNG的Destruct中调用.AsyncTaskEffectCooldownChanged.h/cpp.
+
+4.5.15.3 Predicting Colldowns
+当前, Cooldown不能被真实地预测。当本地predicted的Cooldown GE被应用时就开始UI的cooldown定时, 但是GA的实际colldown是被绑定到server's cooldown's 剩余时间.
+
 
 
 ## 4.8 Gamplay Cues
 ### 4.8.1 Gameplay Cue Definition
 GameplayCues(GC) 执行非gameplay 相关的事, 音效, 粒子, 相机震动等.
- 

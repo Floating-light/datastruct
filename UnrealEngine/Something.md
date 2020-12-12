@@ -87,3 +87,5 @@ The  Game has crashed and will close
 # Project Config modify in runtime
  https://answers.unrealengine.com/questions/606337/config-not-being-saved-uproperty-uclass.html
  
+# 序列化
+https://www.jianshu.com/p/9fea500aaa4d

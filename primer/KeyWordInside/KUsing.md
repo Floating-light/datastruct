@@ -267,7 +267,12 @@ auto fcn2(It beg, It end) -> typename remove_reference<decltype(*beg)>::type
 ### vfptr and  vtptr
 
 ### 虚继承
+https://blog.csdn.net/xiejingfa/article/details/48028491
+![h](./heritance.png)
 
+在虚函数机制下有vptr(virtual pointer)和vtbl(virtual table list)
+虚继承下有vbptr和vbtable.
+后者解决菱形继承. vbptr指向vbtable, 每一个虚派生的类都有.vbtable中每一个元素为基于当前类(即可能会是菱形下端的类)的到虚基类的元素的地址偏移(虚基类有多少成员就有多少元素).在进一步的派生中,如果出现了两个同一类型的虚基类, 则只会在这个类的内存空间中存在一份虚基类的数据, 此时两个需派生的父类的vbtable中的偏移就是基于此类并指向这唯一一份的虚基类数据.这就解决了两个虚派生的类访问共同虚基类。此时虚基类对于菱形下端的类而言就是一普通父类的部分.
 ### 模板
 
 ### 内存分配和管理
