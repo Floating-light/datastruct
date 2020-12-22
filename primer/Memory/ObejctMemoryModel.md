@@ -160,3 +160,4 @@ reference:
 * https://isocpp.org/wiki/faq/multiple-inheritance
 * 虚继承:https://blog.csdn.net/longlovefilm/article/details/80558879
 * vbptr和vbtable:https://blog.csdn.net/qq_41431406/article/details/84933450
+* https://blog.twofei.com/496/

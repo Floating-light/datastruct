@@ -9,9 +9,24 @@ public:
     int i;
 };
 
+struct A
+{
+     A(int) {} 
+     A(std::string) {} 
+    explicit operator bool() {return true;} 
+}a;
+
+void func1(A a) {} 
+
 int main()
 {
+    func1(1);
+    func1(std::string("asdf"));
     std::cout << "Test " << std::endl;
+    bool b1(a);
+    if(a);
+
+    bool bb = a;
 }
 /*
 reference:
