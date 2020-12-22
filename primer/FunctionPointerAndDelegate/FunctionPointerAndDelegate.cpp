@@ -29,27 +29,36 @@ class MyTest
     private:
     int i;
 };
-// int main()
-// {
-//     MyTest* MyObj = new MyTest();
-//     MyTest StackObj;
-//     using Func1PtrType = int (MyTest::* )(std::string );
-//     using StaticFunc1Type = int (* )(std::string );
-//     Func1PtrType Func1Ptr = &MyTest::TestFunc1;
-//     StaticFunc1Type Func1PtrStatic = &MyTest::TestStaticFunc;
-//     printf("===>>>%x\n", Func1Ptr);
-//     printf("===>>>%x\n", &MyTest::TestFunc1);
 
-//     printf("===>>>%x\n", &MyTest::TestFunc2);
+int MyFunc(std::string str)
+{
+    return 1110;
+}
+
+int main()
+{
+    MyTest* MyObj = new MyTest();
+    MyTest StackObj;
+    using Func1PtrType = int (MyTest::* )(std::string );
+    using StaticFunc1Type = int (* )(std::string );
+    Func1PtrType Func1Ptr = &MyTest::TestFunc1;
+    StaticFunc1Type Func1PtrStatic = &MyTest::TestStaticFunc;
+    printf("===>>>%x\n", Func1Ptr);
+    printf("===>>>%x\n", &MyTest::TestFunc1);
+
+    printf("===>>>%x\n", &MyTest::TestFunc2);
 
 
-//     std::cout << "Func1 address: " << Func1Ptr << std::endl;
-//     std::cout << "Func2 address: " << &MyTest::TestFunc2 << std::endl;
+    std::cout << "Func1 address: " << Func1Ptr << std::endl;
+    std::cout << "Func2 address: " << &MyTest::TestFunc2 << std::endl;
     
-//     (MyObj->*Func1Ptr)("Call func via member function pointer ");
-//     (StackObj.*Func1Ptr)("Call from stack Object");
-//     (*Func1PtrStatic)("Call static member");
-// }
+    (MyObj->*Func1Ptr)("Call func via member function pointer ");
+    (StackObj.*Func1Ptr)("Call from stack Object");
+    (*Func1PtrStatic)("Call static member");
+
+    Func1PtrStatic = &MyFunc;
+    std::cout << "=======>>> "<< (*Func1PtrStatic)("hahah") << std::endl;
+}
 
 class Base
 {
@@ -72,31 +81,33 @@ public:
     //     return 0;
     // }
 };
-int main()
-{
-    using BaseType = int (Base::* ) (std::string);
-    using DerivedType = int (Derived::* ) ( std::string);
 
-    // Derived 类没有重写
-    BaseType BaseFunc1 = &Base::BaseDerivedFunc;
 
-    DerivedType DerivedFunc1 = &Base::BaseDerivedFunc;
+// int main()
+// {
+//     using BaseType = int (Base::* ) (std::string);
+//     using DerivedType = int (Derived::* ) ( std::string);
 
-    BaseType BaseFunc = &Derived::BaseDerivedFunc;
+//     // Derived 类没有重写
+//     BaseType BaseFunc1 = &Base::BaseDerivedFunc;
 
-    DerivedType DerivedFunc = &Derived::BaseDerivedFunc;
+//     DerivedType DerivedFunc1 = &Base::BaseDerivedFunc;
 
-    Derived d;
-    Base base;
-    (d.*BaseFunc)("Test string");
-    (d.*DerivedFunc)("From DerivedFunc type");
+//     BaseType BaseFunc = &Derived::BaseDerivedFunc;
 
-    (base.*BaseFunc)("Test string");
+//     DerivedType DerivedFunc = &Derived::BaseDerivedFunc;
 
-    // cannot convert from 'Base *' to 'Derived *'
-    // cannot dereference a 'DerivedType' on a 'Base'
-    // (base.*DerivedFunc)("From DerivedFunc type");
+//     Derived d;
+//     Base base;
+//     (d.*BaseFunc)("Test string");
+//     (d.*DerivedFunc)("From DerivedFunc type");
 
-    // ****************************************************** //
+//     (base.*BaseFunc)("Test string");
+
+//     // cannot convert from 'Base *' to 'Derived *'
+//     // cannot dereference a 'DerivedType' on a 'Base'
+//     // (base.*DerivedFunc)("From DerivedFunc type");
+
+//     // ****************************************************** //
     
-}
+// }
