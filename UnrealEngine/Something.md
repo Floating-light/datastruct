@@ -89,3 +89,20 @@ The  Game has crashed and will close
  
 # 序列化
 https://www.jianshu.com/p/9fea500aaa4d
+
+# 创建Uobject
+https://stackoverflow.com/questions/60021804/unreal-engine-4-different-ways-to-instantiate-the-object
+对象原型
+1. NewObject是通常在正常游戏过程中引擎初始化后实例化对象的功能。它提供了一些方便的重载来处理大多数情况。
+2. CreateDefaultSubObject  只能在类构造函数中调用，并负责创建子对象类的CDO实例，将其外部类设置为调用者对象等。当实例化其对象类时，创建的对象将成为该属性的默认对象。
+3. SpawnActor是一种方便的方法，可以在具有指定位置和旋转的级别中生成actor，生成冲突设置，并检查以确保它是可生成的actor类，并且仅是的包装 NewObject<AActor>。
+最终都会调用StaticConstructObject_Internal.
+函数 MarkPendingKill() 可在对象上直接调用，此函数将把指向对象的所有指针设为 NULL，并从全局搜索中移除对象。对象将在下一次垃圾回收过程中被完全删除。
+# 多线程
+https://blog.csdn.net/SUKHOI27SMK/article/details/82997825
+https://zhuanlan.zhihu.com/p/38881269
+1. FRunnable, 重写其Run方法, 用FRunnableThread::Create运行, 要自己管理对象的创建和释放.
+```c++
+	FRunnableThread::Create(my, *FString::Printf(TEXT("TestThreadthread %d "), ++c));
+
+```
