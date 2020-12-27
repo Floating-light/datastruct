@@ -1,5 +1,6 @@
 #include <vector>
 #include <iostream>
+#include <algorithm>
 
 void quickSort(std::vector<int>& v, int low, int high)
 {
@@ -26,4 +27,9 @@ void quickSort(std::vector<int>& v, int low, int high)
     v[j] = temp;
     quickSort(v, low, i - 1);
     quickSort(v, j+1, high );
+}
+
+int main() 
+{
+    
 }

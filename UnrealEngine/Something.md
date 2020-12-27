@@ -98,6 +98,8 @@ https://stackoverflow.com/questions/60021804/unreal-engine-4-different-ways-to-i
 3. SpawnActor是一种方便的方法，可以在具有指定位置和旋转的级别中生成actor，生成冲突设置，并检查以确保它是可生成的actor类，并且仅是的包装 NewObject<AActor>。
 最终都会调用StaticConstructObject_Internal.
 函数 MarkPendingKill() 可在对象上直接调用，此函数将把指向对象的所有指针设为 NULL，并从全局搜索中移除对象。对象将在下一次垃圾回收过程中被完全删除。
+
+防止GC, AddtoRoot()， 或创建时指定flag RootSet
 # 多线程
 https://blog.csdn.net/SUKHOI27SMK/article/details/82997825
 https://zhuanlan.zhihu.com/p/38881269
