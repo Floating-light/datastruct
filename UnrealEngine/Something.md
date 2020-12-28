@@ -104,5 +104,26 @@ https://zhuanlan.zhihu.com/p/38881269
 1. FRunnable, 重写其Run方法, 用FRunnableThread::Create运行, 要自己管理对象的创建和释放.
 ```c++
 	FRunnableThread::Create(my, *FString::Printf(TEXT("TestThreadthread %d "), ++c));
+```
+2. FAsyncTask<>. 
+全局线程池:
+```c++
+/** The global thread pool */
+FQueuedThreadPool* GThreadPool = nullptr;
 
+FQueuedThreadPool* GIOThreadPool = nullptr;
+
+FQueuedThreadPool* GBackgroundPriorityThreadPool = nullptr;
+// ------------------------------------------------------------
+TArray<FQueuedThread*> QueuedThreads;
+
+```
+
+# 智能指针
+不可用于UObject, 它有自己的内存管理方式.
+TSharedPtr, TWeakPtr, TUniquePtr 和c++那三个一样
+TSharedRef, 实现的'引用'的语义, 即不可为空的sharedptr.同样是个指针, 也有引用计数.
+如果用空指针初始化, 
+```c++ 
+check(InObject != nullptr);
 ```
