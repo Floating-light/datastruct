@@ -58,6 +58,34 @@ public:
     }
 };
 
+class Solution
+{
+    public:
+    int largestRectangleArea(vector<int>& heights)
+    {
+        int res = 0;
+        stack<int> M;
+        heights.push_back(-1);
+        for(int i = 0; i < heights.size() ; )
+        {
+            if(M.empty() || heights[i] >= heights[M.top()])
+            {
+                M.push(i);
+                ++i;
+            }
+            else
+            {
+                if(M.empty() ) break;
+                int t = heights[M.top()];
+                M.pop();
+                int lo = M.empty() ? -1 : M.top();
+                res = std::max(res, t* (i - lo -1));
+            }
+        }
+        return res;
+    }
+};
+
 int main() 
 {
     vector<int> input{7};
