@@ -1,82 +1,29 @@
-// ProcessDefaultParam
-struct Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam_Statics
-	{
-#if WITH_METADATA
-		static const UE4CodeGen_Private::FMetaDataPairParam Function_MetaDataParams[];
-#endif
-		static const UE4CodeGen_Private::FFunctionParams FuncParams;
-	};
-#if WITH_METADATA
-	const UE4CodeGen_Private::FMetaDataPairParam Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam_Statics::Function_MetaDataParams[] = {
-		{ "Comment", "//BlueprintImplementableEvents in Interfaces must not be declared 'virtual'\n// ??\xcd\xbc\xca\xb5??, c++ ????Excute_ProcessDefaultParam()????\n" },
-		{ "ModuleRelativePath", "Public/Frame/Base/Interface/PawnControllerInterface.h" },
-		{ "ToolTip", "BlueprintImplementableEvents in Interfaces must not be declared 'virtual'\n ??\xcd\xbc\xca\xb5??, c++ ????Excute_ProcessDefaultParam()????" },
-	};
-#endif
-	const UE4CodeGen_Private::FFunctionParams Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam_Statics::FuncParams = { 
-        (UObject*(*)())Z_Construct_UClass_UPawnControllerInterface,
-        nullptr, 
-        "ProcessDefaultParam", 
-        nullptr, 
-        nullptr, 
-        0, 
-        nullptr, 
-        0, 
-        RF_Public|RF_Transient|RF_MarkAsNative, 
-        (EFunctionFlags)0x08020800, 
-        0, 
-        0, 
-        METADATA_PARAMS(Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam_Statics::Function_MetaDataParams, 
-        UE_ARRAY_COUNT(Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam_Statics::Function_MetaDataParams)) };
+#include <iostream>
+#include <string>
 
-	UFunction* Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam()
+using namespace std;
+
+int main()
+{
+	const int image_width = 256;
+	const int image_height = 256;
+
+	std::cout << "P3\n" << image_width << " " << image_height << "\n255\n" ;
+
+	for(int j = image_height - 1; j >=0; --j)
 	{
-		static UFunction* ReturnFunction = nullptr;
-		if (!ReturnFunction)
+		for(int i = 0; i < image_width; ++i)
 		{
-			UE4CodeGen_Private::ConstructUFunction(ReturnFunction, Z_Construct_UFunction_UPawnControllerInterface_ProcessDefaultParam_Statics::FuncParams);
+			auto r = double(i) /( image_width - 1);
+			auto g = double(j) /( image_height - 1);
+			auto b = 0.25;
+
+			int ir = static_cast<int>(255.999 * r);
+			int ig = static_cast<int>(255.999 * g);
+			int ib = static_cast<int>(255.999 * b);
+
+			std::cout << ir << ' ' << ig << ' ' << ib << '\n';
 		}
-		return ReturnFunction;
 	}
-
-
-
-
-    // TestBPNative
-	struct Z_Construct_UFunction_UPawnControllerInterface_TestBPNative_Statics
-	{
-#if WITH_METADATA
-		static const UE4CodeGen_Private::FMetaDataPairParam Function_MetaDataParams[];
-#endif
-		static const UE4CodeGen_Private::FFunctionParams FuncParams;
-	};
-#if WITH_METADATA
-	const UE4CodeGen_Private::FMetaDataPairParam Z_Construct_UFunction_UPawnControllerInterface_TestBPNative_Statics::Function_MetaDataParams[] = {
-		{ "ModuleRelativePath", "Public/Frame/Base/Interface/PawnControllerInterface.h" },
-	};
-#endif
-	const UE4CodeGen_Private::FFunctionParams Z_Construct_UFunction_UPawnControllerInterface_TestBPNative_Statics::FuncParams = { 
-        (UObject*(*)())Z_Construct_UClass_UPawnControllerInterface, 
-        nullptr, 
-        "TestBPNative", 
-        nullptr, 
-        nullptr, 
-        0, 
-        nullptr, 
-        0, 
-        RF_Public|RF_Transient|RF_MarkAsNative, 
-        (EFunctionFlags)0x08020C00,
-        0, 
-        0, 
-        METADATA_PARAMS(Z_Construct_UFunction_UPawnControllerInterface_TestBPNative_Statics::Function_MetaDataParams, 
-        UE_ARRAY_COUNT(Z_Construct_UFunction_UPawnControllerInterface_TestBPNative_Statics::Function_MetaDataParams)) };
-	
-    UFunction* Z_Construct_UFunction_UPawnControllerInterface_TestBPNative()
-	{
-		static UFunction* ReturnFunction = nullptr;
-		if (!ReturnFunction)
-		{
-			UE4CodeGen_Private::ConstructUFunction(ReturnFunction, Z_Construct_UFunction_UPawnControllerInterface_TestBPNative_Statics::FuncParams);
-		}
-		return ReturnFunction;
-	}
+	return 0;
+}
