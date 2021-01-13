@@ -153,5 +153,144 @@ Overshading 过度着色
 GBuffer 会占用很多内存, 因为每一帧要渲染X张中间信息的图片, 如果有60帧每秒就要有60*10张.这些都还要送给GPU, 需要大量的带宽.
 
 # 7. 渲染和纹理
-纹理在导入时总会被压缩.方式因平台而异, PC上通常是BC(DXTC DirectX Texture Compression). BC有许多压缩设置UE4没有暴露出来.法线贴图用特殊的BC5格式, 仅保留Red/Green
+## 压缩
+纹理在导入时总会被压缩.方式因平台而异, PC上通常是BC(块压缩DXTC DirectX Texture Compression). BC有许多压缩设置UE4没有暴露出来.
 
+```
+Why 要压缩?
+因为内存和带宽有限.
+着色器有最大纹理采样数量.
+不会影响渲染性能. 只会造成画面滞后或冻结或卡顿, 不会导致帧率持续下降.
+```
+法线贴图用特殊的BC5格式, 仅保留Red/Green, 可以通过这两个通道直接计算出Blue通道.
+
+BC3(DXTC5) = Textures with alpha.
+BC1(DXTC1) = Textures without alpha 
+
+Photoshop 中有一个插件 Intel Texture Works可以预览不同的压缩方式.
+
+UE4的TextureEditor中, Compression Setting 可以选择压缩方式:
+
+* BC7可以得到最高的质量.
+
+* VectorDisplacementmap RGBA8 这样的是没有压缩的, 相当于解压缩.
+
+* Grayscale 压缩的很大, 几乎没有压缩.
+
+* 法线贴图必须是BC5 
+## Mipmaps 多级渐进纹理
+WHY?
+最大化内存效率, 平滑图片.
+没有Mipmaps, 会出现许多噪点.
+![Mipmap](./image/MipMap.png)
+根据距离切换使用不同模糊程度的Texture,(实际上还是同一张, 只是根据渲染距离切换)
+离相机越远用的分辨率越低.
+ 
+Texture Streaming : 确定Engine何时需要那一张纹理, 并仅在需要时加载.根据相机位置和角度.
+
+每一级的大小是上一级的1/4.
+因此, Texture 的长和宽都必须是2的幂的大小, 可以不同.
+如果不是, 仍可以使用, 但不会有MipMap.
+
+# 8 Sharder and Material 
+
+## Pixel Shaders
+和 Vertex shader 相似. 在GPU上运行的一组计算以修改像素的颜色.
+渲染管线的核心, 用于计算和应用渲染的每一步, 从几何渲染 直到渲染完成. 
+
+用来实现材质系统, 光照, 雾, 后处理, 反射, 颜色校正.
+
+### Shader Language
+着色语言是平台特异的.在DirectX上用HLSL--High Level Shader Language.
+
+1. Shader编写时带有一些未定义的变量
+2. 依赖于不同的使用情况, 定义这些变量.
+3. 同样的Shader用于许多模型, 每次都有着不同定义的输入变量.
+![Shader](./image/Shader.png)
+![UE4Shader](./image/UE4Shader.png)
+
+Blend Mode 就是不同的Shader模板, 所以有不同的输出参数.
+
+Material pipeline 是基于PBR.使用Specular/Metallic/Roughness, 高光/金属/粗糙度, 计算环境种几乎所有的着色.
+
+### 性能影响
+1. 材质/Shader 可以查看的纹理采样器数量(通常16个, 13可以使用)有限.DX11可以用128个(shared samplers).
+2. Texture 太大可能造成滞后或卡顿, 但不会有持续的帧率损失.
+3. 像素着色器有很大影响.
+4. 分辨率越高, 材质受到影响就越大越复杂.
+一个材质在屏幕上着色的像素越多, 性能损耗就越大.
+
+# 9 反射
+很难实时实现. 用三种不同的技术混合.完了和渲染的剩下部分去混合.
+## 1. Reflection Captures 反射捕获
+在指定位置捕获静态立方体贴图.预计算, 很快, inaccurate 不准确. 在捕获地点附近的局部效果.
+
+Sphere Reflection Capture Actor: 当相机到捕获点时,就可以看到.
+
+## 2. Planar Reflections 平面反射
+很少用, 仅限于在某个平面上的反射.
+* 在一些设置下的消耗可能很大.
+* 适用于需要精确反射效果的平面.
+* 不适合其它东西.
+* 仅在受限的区域内有效.
+做一面在房间里的镜子很容易.但不适合海面这么大的区域.
+
+## 3. Screen Space Reflecctions (SSR) 屏幕空间反射
+默认开启, 能反射所有对象, 而且是实时的, 精确的, 结果会有噪声, 中等性能消耗, 仅能显示屏幕可见的几何体的反射.
+在PostProcessVolume中设置, Rendering Features > Screen Space Reflections > Intensity
+
+性能影响:
+1. 在一个工程没有打包时, 每次加载关卡都会捕获反射, 所以过多的反射捕获会很慢.
+2. 多个反射捕获重叠极度影响性能.Pixel shading 会一遍遍操作同一个像素.
+3. 反射捕获分辨率可在Project setting 中设置.
+
+* Skylight 可以为整个world提供低成本反射捕获.
+* 仅在需要时开启平面反射.
+* SSR性能消耗最多, 移动设备上可以直接 关掉.
+* 如果性能允许, 可以提升SSR质量以避免噪声. r.SSR.Quality
+
+# 10 Static light 
+指所有预先计算的光照. 光照和阴影是分开的.
+```c++
+静态光照
+静态阴影 
+动态光照
+动态阴影
+```
+## Process Pros/Cons
+1. 在编辑器中预计算, 并存储在lightmaps中.
+2. 超级快, 但会增加内存开销
+3. 预计算光照会花费大量时间
+4. 每次有什么东西改变都的重新渲染.
+5. 模型需要lightmap UV, 这个额外的步骤会花费时间.
+## Quality Pros/Cons
+1. 处理辐射和全局光照
+2. 渲染真实的阴影, 包括软阴影.
+3. 质量依赖于lightmap 分辨率和UV布局.
+4. 出现一些缝, 由于UV布局
+5. Lightmap 分辨率有上限.
+6. 太大的模型没有足够的lightmap UV空间.
+7. 一旦计算好, 光照和阴影不能在运行时修改.
+
+## Lightmaps
+就是一种纹理, 带有光照和阴影信息.会被乘到baseclor上.模型的UV lightmap就是这个用处.
+![Lightmaps](./image/Lightmaps.png)
+
+## Lightmass
+是一个独立的Application, 处理光照渲染并烘培到lightmaps.
+
+支持通过网络进行分布式渲染.
+
+烘培质量取决于Light Build质量和每个关卡的Lightmass section 的设置.
+
+LightmassImportanceVolume 体积内的任何东西都会有更高质量的光照.
+
+## Indirect Lighting Cache
+为了处理在动态模型上的预计算光照, 需要ILC间接光照缓存.
+LightmassImportanceVolume 中会生成各种带有当前点位范围光照信息的点.
+
+每个可移动的模型都有个属性: indirect Light Cache Quality.
+
+Lightmass Character Indirect Detail Volume 强迫这些间接光照点的出现.
+
+World setting 中 Volume Light Sample Placement 可以设置缓存点密度.
