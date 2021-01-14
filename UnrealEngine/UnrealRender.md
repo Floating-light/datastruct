@@ -370,3 +370,54 @@ DF是众多加速计算两点间距离的过程的办法.
 * 在静态光头上加个动态光强调着色和阴影,并在static 结果上提供一层可交互的结果.
 * 如果最求性能, 就只用静态光照.
 * 如果需要在任何时候都自由地修改光源, 用动态光照.
+
+# 12. Fog and Transparency
+
+## Distance Fog 
+有两种类型的雾:
+* Atmospheric and Exponentional 
+* Local volumetric fog
+距离雾意味着雾随着距离的变换而消散.
+Height fog 在接近天空时消散.
+这些都是基于Pixel Shader.
+Depth 图+Fog 颜色, 根据离相机的远近, 着不同程度的雾的颜色.然后和其它结果混合在一起.
+
+## Transparency 
+在延迟渲染中难得多.因为GBuffer没有提供足够的信息来渲染透明度.除非能正确的设置它或者转移到前向渲染中实现.
+
+因此把半透明表面的渲染推迟到很靠后的阶段.
+
+为了获得高质量透明效果, 用前向渲染完成一部分操作(透明度), 再和延迟渲染管线合并.
+
+在材质中, Translucency 有许多设置, 要么设置成效果普通运行也快, 或者效果很好但运行缓慢.
+
+## Transparency Performance Implications
+1. 以最高质量渲染透明度时, Pixel shader 损耗很大.
+2. 多层半透明表面重叠到一个像素上, 或者覆盖了大量的像素都会expensive.
+3. 除了pixel shader, 渲染排序也会加重损耗,很慢且容错率低.
+
+半透明材质shading model 尽量使用无光照模式.
+Lighting Mode, Volumetrix PerVextex Direction
+使用其它办法伪造半透明效果.
+
+## Things not covered 
+* Sub Surface rendering 
+* Refraction
+* Displacement 
+* Screen Space Ambient Occlusion 
+* Interface and UI rendering 
+* Decals 
+
+# 13. Post Processing 
+后处理是一种视觉效果,应用在render的非常后面.严重依赖Pixel shaders.复用GBuffer来组合计算.
+
+常见效果:
+* Light Bloom 
+* Depth of Field / Blurring
+* Some types of lensflares 
+* Light Shafts
+* Vignette
+* Tonemapping / Color correction
+* Exposure
+* Motion Blur
+
