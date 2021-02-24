@@ -1,3 +1,17 @@
+# 2. Sample Project 
+* 多人第三人称射击
+* C++, blueprints, UMG, Replication, Intermediate topics in UE4.
+* AbilitySystemComponent on PlayerState for heroes(Player or AI controlled). 
+* AbilitySystemComponent on the character for AI controlled minions(小兵).
+* No predicting projectiles.
+
+# 4. GAS Concepts
+## 4.1 Ability System Component
+* UAbilitySystemComponent --> UActorComponent
+* 一个Actor 想要use GameplayAbilities, have Attributes, receive GameplayEffects. 必须要有一个ASC.
+* OwnerActor 逻辑上拥有ASC的actor(PlayerState), AvatarActor ASC 的物理表示的Actor(Character).也可以是一样的.
+* 如果OwnerActor和AvatarActor不同, 两者都需要实现IAbilitySystemInterface.均指向同一个ASC.
+
 ### 4.3.3 Meta Attributes
 需要和其它Attributes交互的属性, 比如Damage, GameplayEffect不直接更改health Attribute, 而是用Meta Attribute作为占位, 进一步这个临时属性可以被buffs 或debuffs更改.
 
