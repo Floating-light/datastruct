@@ -11,6 +11,21 @@
 * 一个Actor 想要use GameplayAbilities, have Attributes, receive GameplayEffects. 必须要有一个ASC.
 * OwnerActor 逻辑上拥有ASC的actor(PlayerState), AvatarActor ASC 的物理表示的Actor(Character).也可以是一样的.
 * 如果OwnerActor和AvatarActor不同, 两者都需要实现IAbilitySystemInterface.均指向同一个ASC.
+### 4.1.1 Replication Mode
+Mixed : GE仅会被复制给owning client. GameplayTags 和 GameplayCues 复制给所有client.
+
+### 4.1.2 Setup and Initialization
+ASC通常在Owner Actor 的构造函数中创建.
+
+然后，还需要用OwnerActor和AvatarActor初始化ASC, 在Server和Client上都需要. 
+
+如果player controlled characters 为OwnerActor和AvatarActor. 则在Character的contructor中创建ASC.
+对于server上的初始化,可在ACharacter::PossessedBy中初始化.
+对于Client上的初始化, 可在APlayerController::AcknowledgePossession上初始化.
+
+如果ASC在PlayerState上, 
+在Server, 在Character的PossessedBy()中初始化. 
+在Client, Pawn's OnRep_PlayerState()函数中, 这确保了PlayerState存在于Client上.
 
 ### 4.3.3 Meta Attributes
 需要和其它Attributes交互的属性, 比如Damage, GameplayEffect不直接更改health Attribute, 而是用Meta Attribute作为占位, 进一步这个临时属性可以被buffs 或debuffs更改.
