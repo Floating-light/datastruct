@@ -26,9 +26,71 @@ ASC通常在Owner Actor 的构造函数中创建.
 如果ASC在PlayerState上, 
 在Server, 在Character的PossessedBy()中初始化. 
 在Client, Pawn's OnRep_PlayerState()函数中, 这确保了PlayerState存在于Client上.
+# 4.2 Gameplay Tags
+
+FGameplayTags 是一种以层次结构管理的names, 形式类似于Parrent.Child.Grandchild...,由GameplayTagManager注册.在分类和描述一个Objact的状态时很有用. 例如, 如果一个Character被眩晕, 则可以在眩晕期间给这个Character一个State.Debuff.Stun GameplayTag.
+
+可以通过是否有特定标签, 来代替对booleans 或者enums的判断.
+
+当给一个Tags给object, 通常就是把tag添加到它的ASC上, 这样GAS就可以和这些Tags交互. UAbilitySystemComponent可以实现IgameplayTagAssetInterface, 提供访问自己拥有的Tag的方法.
+
+多个GameplayTags可以存储在FGameplayTagContainer中, 而不是用TArray&lt;FGameplayTag&gt;, 因为GameplayTagContainers对GameplayTags的管理更高效.如果tags是标准的FNames, 它们则可以在GameplayTagContainers中高效地打包在一起, 同时如果在project setting中开启了Fast Replication, 就可以高效地复制这些Tags.Fast Replication 要求server和clients有同样的GameplayTags列表.这通常不是问题. GameplayTagContainers 也可以返回一个TArray&lt;FGameplayTag&gt;用于iteration.
+
+存储在FGameplayTagCountContainer中的GameplayTags 会有一个TagMap存储了GameplayTag的实例数目.一个FGameplayTagCountContainer可能有GameplayTag在其中, 但它的TagMapCount是0.
+
+GameplayTags必须被定义在DefaultGameplayTag.ini中, UE4 Editor在Project setting 提供了UI 以管理GameplayTags, 可以创建, 重命名, 搜索引用, 删除 GameplayTags.
+
+搜索GameplayTag引用将会在熟悉的Rederence Viewer中显示所有引用了这个GameplayTag的assets. 但是不会显示c++ class.
+
+重命名GameplayTag会创建redirect, 即assets仍然引用原来的GameplayTag, 但它会被重定向到新的GameplayTag. 如果可以, 建议先创建新的GameplayTag, 然后手动更新引用到新的GameplayTag, 再删除原来的GameplayTag, 以避免创建Redirect.
+
+除了Fast Replication, GameplayTag editor 中还有其它选项去进一步优化GameplayTags的复制.
+
+如果GameplayTags是从GameplayEffect添加的, 它就会被复制.在ASC中, 可以添加LooseGameplayTags, 它们不能被复制, 必须手动管理. Sample Project 将State.Dead 作为LooseGameplayTag, owning clients 可以在health为0时立即做出反应. Respawning 手动将TagMapCount设置回0. 用LooseGameplayTags时, 仅需要手动调整TagMapCount的值.通常使用UAbilitySystemComponent::AddLooseGameplayTag() 和 UAbilitySystemComponent::RemoveLooseGameplayTag()调整.
+
+获取对一个GameplayTag的引用:
+```c++
+FGameplayTag::RequestGameplayTag(FName("Your.GameplayTag.Name"));
+```
+对GameplayTag更多的操作在GameplayTagManager.h的方法, 通过UGameplayTagManager::Get().访问.GameplayTagManager实际将GameplayTags保存为一些相关的节点, 以快速处理 constant string 操作和比较.
+
+GameplayTags and GameplayTagContainers可以有Meta = （Categories = "GameplayCue"）, 这和通常的意义不同, 这会使得在蓝图中仅显示有"GameplayCue"父节点的GameplayTag. 这在已知这些变量只应该用于GameplayCues时很有用.
+此外, FGameplayCueTag封装了一个FGameplayTag, 实现和上述相同的功能.
+
+过滤函数的GameplayTag参数, 可以在UFUNCTION中加 `Meta = (GameplayTagFilter = "GameplayCue")`。GameplayTagContainer未实现此功能, 但可以自己实现. 可以看看 `Engine\Plugins\Editor\GameplayTagsEditor\Source\GameplayTagsEditor\Private\SGameplayTagGraphPin.cpp`中的`SGameplayTagGraphPin::ParseDefaultValueData()`函数是如何调用
+`FilterString = UGameplayTagsManager::Get().GetCategoriesMetaFromField(PinStructType);`并且传递`FilterString`给`SGameplayTagGraphPin::GetListContent()`中的`SGameplayTagWidget`. GameplayTagContainer版本的这些函数在`Engine\Plugins\Editor\GameplayTagsEditor\Source\GameplayTagsEditor\Private\SGameplayTagContainerGraphPin.cpp`, 没有检查meta 属性字段。
+
+### 4.2.1 Responding to Changes in Gameplay Tags
+当GameplayTags添加或删除时, 可以触发ASC中的委托, EGameplayTagEventType 触发的改变方式(added, removed or any change)
+```c++
+AbilitySystemComponent->RegisterGameplayTagEvent(FGameplayTag::RequestGameplayTag(FName("State.Debuff.Stun")), EGameplayTagEventype::NewOrRemoved).AddUObject(this, &AGDPlayerState::StunTagChanged);
+
+// call back function
+virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+```
+## 4.3 Attributes 
+### 4.3.1 Attribute Definition
+通常由FGameplayAttributeData来表示, 就是一个浮点数, 有BaseValue 和 CurrentValue, 方便一些逻辑上的处理.如果一个数值是和某个Acctor相关的, 就可以考虑以一个Attribute表示它. 
+
+一个Attribute被定义成AttributeSet子类的一个成员.通常就是为FGameplayAttributeData类型. AttributeSet负责复制那些被标记为replication的属性.
+Tip: 不想要一个属性显示在Editor's Attributes list, 可以用Meta = (HideInDetailsView).
+
+### 4.3.2 BaseValue vs CurrentValue 
+FGameplayAttributeData通常将一个属性表示为BaseValue 和 CurrentValue, BaseValue 表示永久的值, 而CurrentValue 表示在 BaseValue 的基础上加上一些临时的修改量.比如一个临时的冲刺.
+
+* BaseValue 和 Maximum value
+Attribute的Maximum value 可以改变或者被abilities或Ui 引用, 所以应该作为一个单独的属性对待.对于硬编码的最大最小值, 可以用FAttributeMetaData定义一个数据表设置maximum 和minimum values, (work in progress).通常建议, 可以被abilities 或UI 引用的Maximum值作为单独的属性. 硬编码的最大最小值仅用于clamping Attributes，可以在AttributeSet中被定义成floats.
+
+Instant GE 对BaseValue造成永久性的改变.Duration和Infinite GE 改变CurrentValue. Periodic GE 被当作instant GE对待, 改变BaselValue.
 
 ### 4.3.3 Meta Attributes
-需要和其它Attributes交互的属性, 比如Damage, GameplayEffect不直接更改health Attribute, 而是用Meta Attribute作为占位, 进一步这个临时属性可以被buffs 或debuffs更改.
+其实还是FGameplayAttributeData, 仅意义上称为Meta Attributes.需要和其它Attributes交互的属性, 比如Damage, GameplayEffect不直接更改health Attribute, 而是用Meta Attribute作为占位, 进一步这个临时属性可以被buffs 或debuffs更改(护盾), 最终从Helth减去它.通常不可复制.
+
+Meta Attributes 在逻辑上将Damage和healing这样的东西分开, 这也意味着GE和Execution Calculations 不需要知道Target如何处理这些Damage.即 GE 决定有多少Damage, AttributeSet决定对这些Damage做什么.
+
+并不是所有的Characters都有同样的Attributes. Base AttributeSet class 可能仅仅有一个health Attribute, 但是子类可能会多一个shield Attribute， 而它对damage 的处理将和base AttributeSet的处理完全不同.
+
+虽然Meta Attributes 很好用, 但也不是强制的. 如果仅有一个Execution Calculation 用于所有damage 实例,  并且所有Characters 共享一个AttributeSet 类, 这样的话直接在Exeuction Calculation应用Damage 到health , shields并直接修改这些Attributes. 
 
 ### 4.3.4 Responding to Attribute Changes
 当属性值发生改变时, 会调用指定的委托, 
@@ -612,4 +674,19 @@ Sample Project实现了一个自定义蓝图节点监听Cooldown的开始和结�
 
 ## 4.8 Gamplay Cues
 ### 4.8.1 Gameplay Cue Definition
-GameplayCues(GC) 执行非gameplay 相关的事, 音效, 粒子, 相机震动等.
+* GameplayCues(GC) 执行非gameplay 相关的事, 音效, 粒子, 相机震动等.
+* Replicated (unless explicitly Executed, Added, or Removed locally) and predicted
+* 触发一个GameplayCues: 发送一个以对应GameplayCue的Name为父Name的GameplayTag 和 通过ASC发送一个event type 给GameplayCueManager.
+* GameplayCueNotify objects和其它Actors可以实现IGameplayCueInterface , 以订阅这些事件.基于这些GameplayCue's GameplayCueTag(GameplayCueTag) 订阅.
+* Reiterate: GameplayCue 的GameplayTags必须以GameplayCue的父GameplayTag开头.
+
+有两类GameplayCueNotifies--> Static and Actor . 对不同的Events 和不同的GameplayEffects做出反应.
+
+| `GameplayCue` Class                                                                                                                  | Event             | `GameplayEffect` Type    | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`GameplayCueNotify_Static`](https://docs.unrealengine.com/en-US/API/Plugins/GameplayAbilities/UGameplayCueNotify_Static/index.html) | `Execute`         | `Instant` or `Periodic`  | Static `GameplayCueNotifies` operate on the `ClassDefaultObject` (meaning no instances) and are perfect for one-off effects like hit impacts.                                                                                                                                                                                                                                                                                                                                                                        |
+| [`GameplayCueNotify_Actor`](https://docs.unrealengine.com/en-US/BlueprintAPI/GameplayCueNotify/index.html)                           | `Add` or `Remove` | `Duration` or `Infinite` | Actor `GameplayCueNotifies` spawn a new instance when `Added`. Because these are instanced, they can do actions over time until they are `Removed`. These are good for looping sounds and particle effects that will be removed when the backing `Duration` or `Infinite` `GameplayEffect` is removed or by manually calling remove. These also come with options to manage how many are allowed to be `Added` at the same so that multiple applications of the same effect only start the sounds or particles once. |
+
+从技术上讲GameplayCueNotfies可以对任何Events 做出反应.
+
+Note: 使用GameplayCueNotify_Actor时, 需要检查`Auto Destroy on Remove`, 否则接下来Add这一GameplayCueTag将不会起作用.
