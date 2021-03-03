@@ -93,7 +93,28 @@ Meta Attributes 在逻辑上将Damage和healing这样的东西分开, 这也意�
 虽然Meta Attributes 很好用, 但也不是强制的. 如果仅有一个Execution Calculation 用于所有damage 实例,  并且所有Characters 共享一个AttributeSet 类, 这样的话直接在Exeuction Calculation应用Damage 到health , shields并直接修改这些Attributes. 
 
 ### 4.3.4 Responding to Attribute Changes
-当属性值发生改变时, 会调用指定的委托, 
+当属性值发生改变时, 会调用指定的委托,这可以用来更新UI面板,处理死亡. 通常在拥有ASC的Actor中完成.
+```c++
+AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSetBase->GetHealthAttribute()).AddUObject(this, &AGDPlayerState::HealthChanged);
+```
+实质上是注册到了FActiveGameplayEffectsContainer中的一个TMap:
+```c++
+TMap<FGameplayAttribute, FOnGameplayAttributeValueChange> AttributeValueChangeDelegates;
+```
+激活的GE应该在ASC中:
+```c++
+/** Contains all of the gameplay effects that are currently active on this component */
+UPROPERTY(Replicated)
+FActiveGameplayEffectsContainer ActiveGameplayEffects;
+```
+即当有GE改变了一些属性时, 可以通过它所在的Container回调到对应的委托.
+
+也可以自定义蓝图节点, 以在蓝图中实现这个回调. 
+### 4.3.5 Derived Attributes
+
+
+
+
 
 ## 4.4 Attribute Set
 ### 4.4.1 Attribute Set definition
@@ -670,7 +691,116 @@ Sample Project实现了一个自定义蓝图节点监听Cooldown的开始和结�
 4.5.15.3 Predicting Colldowns
 当前, Cooldown不能被真实地预测。当本地predicted的Cooldown GE被应用时就开始UI的cooldown定时, 但是GA的实际colldown是被绑定到server's cooldown's 剩余时间.
 
+## 4.6 Gameplay Abilities
+### 4.6.1 Gameplay Ability Definition
+GameplayAbilities 是一个Actor在Game中世纪可以做的任何actions 或者skills.Example::
+* Jumping
+* Sprinting
+* Shooting a gun 
+* Passively blocking an attack every X number of seconds
+* Using a potion
+* Opening a door 
+* Collecting a resource 
+* Constructing a building 
+不应该用GameplayAbilities实现的:
+* Baseic Movement input 
+* Some interactions with UIs - Don't use a GameplayAbility to purchase an item from a store.
 
+
+### 4.6.2 Binding Input to the ASC
+在通常绑定按键的函数`SetupPlayerInputComponent`调用ASC的下面的函数:
+```c++
+void UAbilitySystemComponent::BindAbilityActivationToInputComponent(UInputComponent* InputComponent, FGameplayAbilityInputBinds BindInfo)
+```
+FGameplayAbilityInputBinds中需要传入瞄准和取消瞄准的按键绑定的Name, 这两个特殊处理, 然后是自定义枚举的Name。
+例如:
+```c++
+AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, FGameplayAbilityInputBinds(FString("ConfirmTarget"),
+	FString("CancelTarget"), FString("EGDAbilityInputID"), static_cast<int32>(EGDAbilityInputID::Confirm), static_cast<int32>(EGDAbilityInputID::Cancel)));
+
+// 其中 AbilitySystemComponent_Abilities.cpp
+void UAbilitySystemComponent::BindAbilityActivationToInputComponent(UInputComponent* InputComponent, FGameplayAbilityInputBinds BindInfo)
+{
+	UEnum* EnumBinds = BindInfo.GetBindEnum();
+
+	SetBlockAbilityBindingsArray(BindInfo);
+
+	for(int32 idx=0; idx < EnumBinds->NumEnums(); ++idx)
+	{
+		const FString FullStr = EnumBinds->GetNameStringByIndex(idx);
+		
+		// Pressed event
+		{
+			FInputActionBinding AB(FName(*FullStr), IE_Pressed);
+			AB.ActionDelegate.GetDelegateForManualSet().BindUObject(this, &UAbilitySystemComponent::AbilityLocalInputPressed, idx);
+			InputComponent->AddActionBinding(AB);
+		}
+
+		// Released event
+		{
+			FInputActionBinding AB(FName(*FullStr), IE_Released);
+			AB.ActionDelegate.GetDelegateForManualSet().BindUObject(this, &UAbilitySystemComponent::AbilityLocalInputReleased, idx);
+			InputComponent->AddActionBinding(AB);
+		}
+	}
+
+	// Bind Confirm/Cancel. Note: these have to come last!
+	if (BindInfo.ConfirmTargetCommand.IsEmpty() == false)
+	{
+		FInputActionBinding AB(FName(*BindInfo.ConfirmTargetCommand), IE_Pressed);
+		AB.ActionDelegate.GetDelegateForManualSet().BindUObject(this, &UAbilitySystemComponent::LocalInputConfirm);
+		InputComponent->AddActionBinding(AB);
+	}
+	
+	if (BindInfo.CancelTargetCommand.IsEmpty() == false)
+	{
+		FInputActionBinding AB(FName(*BindInfo.CancelTargetCommand), IE_Pressed);
+		AB.ActionDelegate.GetDelegateForManualSet().BindUObject(this, &UAbilitySystemComponent::LocalInputCancel);
+		InputComponent->AddActionBinding(AB);
+	}
+
+	if (BindInfo.CancelTargetInputID >= 0)
+	{
+		GenericCancelInputID = BindInfo.CancelTargetInputID;
+	}
+	if (BindInfo.ConfirmTargetInputID >= 0)
+	{
+		GenericConfirmInputID = BindInfo.ConfirmTargetInputID;
+	}
+}
+```
+这会将EGDAbilityInputID枚举中的每一个字段的字符串Name作为Action Name, 对应在枚举类中的索引作为参数, 绑定到函数:`void UAbilitySystemComponent::AbilityLocalInputPressed(int32 InputID)`,这个函数会在已被授予的Abilities中寻找所有FGameplayAbilitySpec的InputID和传入ID相同的Ability, 并在没有激活的时候激活它.
+```c++
+ABILITYLIST_SCOPE_LOCK();
+for (FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
+{
+	if (Spec.InputID == InputID)
+	{
+		if (Spec.Ability)
+		{
+			Spec.InputPressed = true;
+			if (Spec.IsActive())
+			{
+				if (Spec.Ability->bReplicateInputDirectly && IsOwnerActorAuthoritative() == false)
+				{
+					ServerSetInputPressed(Spec.Handle);
+				}
+				AbilitySpecInputPressed(Spec);
+				// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
+				InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, Spec.ActivationInfo.GetActivationPredictionKey());					
+			}
+			else
+			{
+				// Ability is not active, so try to activate it
+				TryActivateAbility(Spec.Handle);
+			}
+		}
+	}
+}
+```
+ActivatableAbilities中的FGameplayAbilitySpec的InputID是通过ASC的`GiveAbility(const FGameplayAbilitySpec& Spec)`添加的.在Give Ability时(或创建FGameplayAbilitySpec时), 应该就想好了要和哪一个按键绑定, 从事先定义的枚举获得, 可以在Ability中定义一个属性`AbilityInputID`, 在蓝图中编辑. 
+
+默认授予的Ability也可以是一个Character的成员数组, 在Character被Possess的时候授予所有Ability.
 
 ## 4.8 Gamplay Cues
 ### 4.8.1 Gameplay Cue Definition
@@ -690,3 +820,70 @@ Sample Project实现了一个自定义蓝图节点监听Cooldown的开始和结�
 从技术上讲GameplayCueNotfies可以对任何Events 做出反应.
 
 Note: 使用GameplayCueNotify_Actor时, 需要检查`Auto Destroy on Remove`, 否则接下来Add这一GameplayCueTag将不会起作用.
+
+ 
+## 4.10 Prediction
+GAS 支持对Client-side的prediction. 但并不能预测所有东西. Client-side的预测是指client不必等到Server允许它，就去激活一个GameplayAbility或应用GE, client 预测server将会允许它做这些, 和预测GE将会应用到一个Target上.在Client激活GA并运行了 网络延迟的时间 后, Server将会告诉client它的prediction是否正确.如果Client错了, 将要回滚它的改变, 以匹配Server端的状态.
+
+GAS Prediction 相关代码在 GameplayPrediction.h。
+
+Epic'的对Predict的想法是只预测 what you "can get away with"。For example : Paragon and Fortnite 不预测Damage. 很有可能他们用的是`ExecutionCalculations`，这样怎么也没办法预测Damage.这并不是说你不能尝试预测像Damage这样确定的东西.只要做出来， 而且能work, 就很好.
+```
+we are also not all in on a "predict everything: seamlessly and automatically" solution. We still feel player prediction is best kept to a minimum (meaning: predict the minimum amount of stuff you can get away with).
+仅预测最少数量的东西.
+```
+Dave Ratti from Epic's comment from the new Network Prediction Plugin
+
+What is predicted:
+* Ability activation
+* Triggered Events
+* GameplayEffect application:
+* Attribute modification (EXCEPTIONS: Executions do not currently predict, only attribute modifiers)
+* GameplayTag modification
+* Gameplay Cue events (both from within predictive gameplay effect and on their own)
+* Montages
+* Movement (built into UE4 UCharacterMovement)
+
+What is not predicted:
+* GameplayEffect removal
+* GameplayEffect periodic effects (dots ticking)
+
+From GameplayPrediction.h
+
+
+# 6. Debugging GAS
+
+即可视化显示Tags. 两种方式:
+* showdebug abilitysystem
+* hooks in the GameplayDebugger
+编译时, 会优化一些代码, 导致难以Dubg:
+* VS Solution 配置为DebugGame Editor
+* 在函数的实现上下添加:
+```c++
+PRAGMA_DISABLE_OPTIMIZATION_ACTUAL
+void MyClass::MyFunction(int32 MyIntParameter)
+{
+	// My code
+}
+PRAGMA_ENABLE_OPTIMIZATION_ACTUAL
+```
+### 6.1 文字显示GAS状态信息
+```
+console command： showdebug abilitysystem
+```
+
+翻页: AbilitySystem.Debug.NextCategory
+
+共有三页:
+* 显示所有属性的CurrentValue
+* 显示所有Duration 和infinite GameplayEffects. number of stacks, GameplayTags, Modifiers.
+* grant过的所有GameplayAbilities, 当前running的AbilityTasks状态.
+此外， 还可以用PageUp和pageDown.
+默认显示本地控制的Character的信息, 用AbilitySystem.Debug.NextTarget和AbilitySystem.Debug.PrevTarget可以显示其他ASC的数据，但并不会更新上半部分的信息.
+```
+Note: For showdebug abilitysystem to work an actual HUD class must be selected in the GameMode. Otherwise the command is not found and "Unknown Command" is returned.
+```
+### 6.2 Gameplay Debugger
+可以查看一个Actor的GameplayTags, GameplayEffects, 和GameplayAbilities。但不显示Attributes的CurrentValue.
+
+屏幕中心对中一个Actor, 按下‘(单引号).再按数字键盘3, 如果没有，则要 在project setting 中更改keybingdings.
