@@ -48,7 +48,7 @@ OpenGl至少应该有16个texture unit 可以用,
 
 以下讨论几种方法, 并用FreeType实现一个更先进更灵活的渲染text的技术.
 
-### 48.1 bitmap fonts
+### 48.1 Classical text rendering: bitmap fonts
 把一个font中的所有字符都放到一张texture上, 叫bitmap font.
 这些一个个符号叫做glyphs.渲染时把一个由texture coordinates 指定的字符渲染到一个2D quad 中。
 bitmap font 可由Codehead's Bitmap Font Generator(www.codehead.co.uk/cbfg/)生成.
@@ -69,7 +69,7 @@ FreeType库:
 * render them to bitmaps
 * 提供font相关的操作.
 * load TrueType fonts
-`TrueType` 用样条线, 即一系列控制点来表示的字体.可以生成任意分辨率大小的图形而不会有任何质量上的损失.
+`TrueType` 用样条线, 即一系列控制点来表示的字体.可以生成任意分辨率大小的glyphs而不会有任何质量上的损失.glyphs collection.
 
 ```
 https://www.freetype.org/download.html
@@ -77,3 +77,18 @@ Windows 已经编译好的库: https://github.com/ubawurinna/freetype-windows-bi
 ```
 FreeType 加载TrueType fonts, 对每一个glyph, 都生成一个bitmap image和一些matrics.提取这些bitmap images 生成textures, 并用对应的metrics把每个字符放在恰当的位置.
 
+1. Load fonts
+2. Generates bitmap image for each glyph
+3. and calculates serveral metrics
+4. extract bitmap images for generating textures.
+5. positioneach character glyph  using the loaded metrics.
+
+![Glyph](../Image/GlyphMetrics.png)
+
+每个glyph都基于一个水平baseline定义它的位置和大小, 以及下一个glyph开始的位置:
+
+* width: in pixels, bitmap的宽, face->glyph->bitmap.width.
+* height: in puxels, face->glyph->bitmap.width.
+* bearingX: 此glyph相对于原点在x方向上的偏移, face->glyph->bitmap_left.
+* bearingY: glyph相对于原点y方向上的偏移, face->glyph0>bitmap_top.
+* advance: 下一个glyph的原点的位置相对于当前这个的偏移, 以1/64 pixel 为单位.
