@@ -70,20 +70,38 @@ public class MyBlankProgram : ModuleRules
 ![result](./result.png)
 
 注意:
-1. `Target.cs`中的`LinkType`要是`TargetLinkType.Monolithic`,否则模块的加载会有问题,我在使用RSA时遇到:
+* `Target.cs`中的`LinkType`要是`TargetLinkType.Monolithic`,否则模块的加载会有问题,我在使用RSA时遇到:
 ```
 RSA functionality was used but no modular feature was registered to provide it. Please make sure your project has the PlatformCrypto plugin enabled!
 ```
-2. 使用了插件时要加上下面两句:
+* 使用了插件时要加上下面两句:
 ```
 bCompileWithPluginSupport = true;
 bIncludePluginsForTargetPlatforms = true;
 ```
-3. `bCompileICU`设为`false`
+* `bCompileICU`设为`false`
 ```
 bCompileICU = false;
 ```
+否则在移动可执行文件后会找不到`Internationalization`的资源而崩溃.当然也可以把对应的目录建出来,把`Engine\Content\Internationalization`下的东西也一起拷过去.
 
+## 移动可执行文件后导致的问题
+在默认的输出目录下执行没有问题, 一移动就出现了问题, 多半是资源加载的问题. `LinkType = TargetLinkType.Monolithic`; 可排除动态链接的问题.
+1. 如果Slate中用到了国际化的资源(LOCTEXT), 则要保持`exe`和`Engine\Content\Internationalization`的相对路径,或者把`Target.cs`中的`bCompileICU`设为`false`.
+2. 插件, 我用了一个自己新建的在`Engine/`下的插件, 在`bCompileWithPluginSupport = true;`的情况下, 移动之后还是无法启动, 查看Log发现是
+```
+C:\Workspace\UnrealEngine\Engine\Source\Runtime\CoreUObject\Private\UObject\UObjectBase.cpp Line 496 
+```
+Check失败, UObject没有初始化.
+查看`GEngineLoop.PreInit(ArgC, ArgV)`返回值为1, 初始化失败.
+猜想是因为什么东西加载失败导致整个初始化过程没有完成.通过不断加Log, 
+```
+C:\Workspace\UnrealEngine\Engine\Source\Runtime\Launch\Private\LaunchEngineLoop.cpp Line 5384 return false
+```
+由判断条件看出可能是插件的资源加载失败, 但我的插件没有包含任何外部资源. 
+把插件也考出来，保持相对路径, 发现没有这个问题了, 一个个删里面的东西发现只剩一个uplugin就可以.甚至名字都可以不同.
+3. 如果用了编辑器的一些slate资源, 样式之类的, 还要把`Engine\Content\Slate`下面的东西也考出来, 否则一些字体啊之类的文件加载不出来也会出现问题.
+4. 还有`Engine\Shaders\StandaloneRenderer`里面的东西也要拷出来,否则会说你显卡有问题.
 reference:
 1. https://zhuanlan.zhihu.com/p/145633340
 2. https://imzlp.me/posts/31962/ 
