@@ -193,7 +193,9 @@ bool UAbilitySystemComponent::ReplicateSubobjects(class UActorChannel *Channel, 
 
 在Client上, StaticBuffer也是存的原来的值, 当有新的值被复制过来, 直接写到对应的Object的属性中, 再和StaticBuffer上的值比较, 如果不同, 则调用RepNotify函数, 然后覆盖StaticBuffer上的值.
 
-所以属性该不该复制的判断, 和回调是否执行的判断是没有必然关系的. 
+所以属性该不该复制的判断, 和回调是否执行的判断是没有必然关系的.
+
+属性一般只在第一次复制时标记为可靠, 后续将会是不可靠的. 这样在发生丢包后, 后到的属性会直接被丢弃掉, 这样保证了这个属性最终的状态一致. 但如果最终的包丢掉了也会导致不一致.
 
 ### 7.2 UObject指针作为属性复制或RPC参数
 
