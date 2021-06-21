@@ -39,3 +39,22 @@ PredictionKey 总是从Clicent -> Server, 当从Server -> Clients 仅仅会复�
 
 ### Ability Activation
 Ability 的激活是首先会被预测的行为.无论什么时候Client预测地激活一个Ability, 它都会显式地请求Server并且Server也会显式回应. 一旦一个ABility被预测地激活, Client就会有一个有效的'Prediction Window', 在其中发生预测的Effects, 并且不用显式'请求(asked about)'.(不会显式地问'我能扣法力值吗, 我能把这个Ability置于能却中吗, 这些行为在逻辑上会伴随着激活一个Ability 自动考虑').
+
+AbilitySystemComponent 提供了一系列函数在Client和Server之前对Ability的激活进行通信.TryActivateAbility -> ServerTryActivateAbility -> ClientActivateAbility(Failed/Succeed).
+
+1. Client 调用TryActivateAbility, 生成一个FPredictionKey, 并且调用ServerTryActivateAbility.
+2. Client 继续执行(在收到Server的回复之前), 用生成的PredictionKey 和这个Ability的ActiavtionInfo调用ActivateAbility.
+3. 任何在调用ActiavtAbility完成之前发生的副作用都会和这个生成PredictionKey相关联.
+4. Server 在ServerTryActivateAbility中决定这个Ability是否真的发生, 调用ClientActivateAbility(Failed/Succeed)并且为发上来的Key设置UAbilitySystemComponent::ReplicatedPredictionKey.
+5. 如果Client收到ClientAbilityFailed, 就立即Kill 这个Ability, 并且执行和这个prediction key关联的回滚操作.
+    5a. 'Rolling back' 通过FPredictionKeyDelegates和FPredictionKey::NewRejectedDelegate/NewCaughtUpDelegate/NewRejectOrCaughtUpDelegate.
+```
+在TryActivateAbility中注册回调:
+// 如果这个Predictionkey 被拒绝, 将会调用OnClientActivateAbilityFailed.
+ThisPredictionKey.NewRejectedDelegate().BindUObject(this, &UAbilitySystemComponent::OnClientActivateAbilityFailed, Handle, ThisPredictionKey.Current);
+
+在ClientActivateAbilityFailed_Implementation:
+FPredictionKeyDelegates::BroadcastRejectedDelegate(PredictionKey);
+```
+
+6. 如果接受, Client必须等到Property Replication Catches up(通知成功的RPC会立即被发送, 属性复制会自己发生). 一旦ReplicatedPredicitonKey Catches up 前一步用的Key, Client就可以undo他预测的效果.UAbilitySystemComponent::OnRep_PredictionKey.

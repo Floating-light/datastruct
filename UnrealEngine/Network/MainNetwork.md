@@ -543,3 +543,5 @@ void AGameState::OnRep_MatchState()
 TODO: 
 * ECS, 网络同步, https://www.youtube.com/watch?v=W3aieHjyNvw&t=1308s
     https://blog.codingnow.com/2017/06/overwatch_ecs.html#more
+
+* TArray的复制.https://forums.unrealengine.com/t/replicating-tarrays-crashes-game/21237/6
