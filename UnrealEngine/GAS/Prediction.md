@@ -58,3 +58,27 @@ FPredictionKeyDelegates::BroadcastRejectedDelegate(PredictionKey);
 ```
 
 6. 如果接受, Client必须等到Property Replication Catches up(通知成功的RPC会立即被发送, 属性复制会自己发生). 一旦ReplicatedPredicitonKey Catches up 前一步用的Key, Client就可以undo他预测的效果.UAbilitySystemComponent::OnRep_PredictionKey.
+
+```c++
+bool UAbilitySystemComponent::TryActivateAbility(FGameplayAbilitySpecHandle AbilityToActivate, bool bAllowRemoteActivation);
+// 找不到这个GA, return false
+if(Server && (LocalOnly || LocalPredicted))
+    ClientTryActivateAbility(AbilityToActivate); return ;
+if(Client && (ServerOnly || ServerInitiated))
+    if(CanActivateAbility )
+        CallServerTryActivateAbility(); return ;
+return InternalTryActivateAbility();
+```
+四种执行策略:
+```c++
+// 无论在那个端执行, 最终都是Client开始InternalTryActivateAbility() 进行预测执行, 并在其中RPC到Server.
+// 1. Client 调用TryActivateAbility, --> InternalTryActivateAbility()
+// 2. Server 调用TryActivateAbility, --> ClientTryActivateAbility() -- 处理Ability 复制先后的问题(PendingServerActivatedAbilities), --> InternalTryActivateAbility()
+LocalPredicted	
+// 仅在LocalControlled (Client 和 ListenServer上的本地玩家)上执行.
+LocalOnly		
+// 由Server发起, 但Client也会执行.
+ServerInitiated
+// 仅在Server上Run.
+ServerOnly			
+```
