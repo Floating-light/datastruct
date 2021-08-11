@@ -41,4 +41,25 @@ IMPLEMENT_VERTEX_FACTORY_TYPE_EX(FLocalVertexFactory,"/Engine/Private/LocalVerte
 ### Changing Output Data
 从VertexShader到PixelShader的输出数据, 同样的套路, 在BasePassVertexShader.usf, 用另一个Generically named struct FBasePassVSOutput, 它的实现同样也是看VertexFactory. 这里还有另一个障碍, 如果开启了Tessellation, 在Vertex Shader和Pixel shader之间还有两个阶段(Hull and Domain Stages), 这两个阶段需要不同数据(和仅仅是VS 到PS相比).
 
-### Material Graph to HLSL
+在BasePassVertexCommon.ush中, 用宏定义改变FBasePassVSOutput的定义, 根据是否开启了Tessellation, 选择FBasePassVSToDS或FBasePassVSToPS.
+
+在最终的FBasePassVSOutput中, 有两个结构体成员FVertexFactoryInterpolantsVSToPS 和 FBasePassInterpolantsVSToPS(或DS版本), 其中, FVertexFactoryInterpolantsVSToPS是在具体的*VertexFactory.ush中定义的, 另外一个就是BasePassVertexShader通用的输出.
+
+在BasePassVertexShader中, 用不同的inlcude, 重定义结构体和一些函数抽象出通用代码, 而不依赖于具体的VertexFactory和Tessellation的开启.
+
+### BasePassVertexShader
+在BasePassVertexShader.usf中, 所做的就是计算BasePassInterpolants和VertexFactoryInterpolants的值. 而这些计算过程就有点复杂了. 有许多的特殊情况, 由preprocessor定义 选择声明不同的interpolators, 决定给哪些属性赋值.
+
+例如, 在BasePassVertexShader.usf中, 利用#if WRITES_VELOCITY_TO_GBUFFER , 根据这一帧和上一帧当前顶点世界坐标的差值计算出这个顶点的速度, 并存储在BasePassInterpolants变量中. 这意味着仅仅需要把Velocity写到GBuffer的Shader变体才会执行这个计算, 这减少了Shader stage之间的数据传输, 和计算量.
+
+### Base Pass Pixel Shader
+
+
+
+#### Material Graph to HLSL
+当我们在Editor 中创建Material Graph时, UE4会把这些Node Network翻译成HLSL代码. 这些代码会被编译器插入到HLSL Shader中.在MaterialTemplate.ush中包含了许多没有内容的结构体, 仅仅有个%s. 把这作为字符串格式化的标记, 用Material graph生成的内容替换它.
+
+不仅限于结构体, 很多函数的函数体也是个%s. half GetMaterialCustomData0, half3 GetMaterialBaseColor, half3 GetMaterialNormal, 等等， 这些函数的函数体会根据Material graph的内容填充.这样就可以从PixelShader中调用这些函数, 最终调用到MaterialGraph中的节点, 并返回当前Pixel的结果.
+
+#### The "Primitive" Variable
+名为`Primitive`的变量, 在Shader代码中全局搜索并找不到它的定义, 因为它是在C++端通过一些宏声明的. 这个宏声明了一个结构体, 在每个Primitive在GPU端绘制之前渲染器就会设置它的值.他的声明在`PrimitiveUniformShaderParameters.h`顶端.
