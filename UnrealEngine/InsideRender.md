@@ -62,4 +62,44 @@ IMPLEMENT_VERTEX_FACTORY_TYPE_EX(FLocalVertexFactory,"/Engine/Private/LocalVerte
 不仅限于结构体, 很多函数的函数体也是个%s. half GetMaterialCustomData0, half3 GetMaterialBaseColor, half3 GetMaterialNormal, 等等， 这些函数的函数体会根据Material graph的内容填充.这样就可以从PixelShader中调用这些函数, 最终调用到MaterialGraph中的节点, 并返回当前Pixel的结果.
 
 #### The "Primitive" Variable
-名为`Primitive`的变量, 在Shader代码中全局搜索并找不到它的定义, 因为它是在C++端通过一些宏声明的. 这个宏声明了一个结构体, 在每个Primitive在GPU端绘制之前渲染器就会设置它的值.他的声明在`PrimitiveUniformShaderParameters.h`顶端.
+名为`Primitive`的变量, 在Shader代码中全局搜索并找不到它的定义, 因为它是在C++端通过一些宏声明的. 这个宏声明了一个结构体, 在每个Primitive在GPU端绘制之前渲染器就会设置它的值.他的声明在`PrimitiveUniformShaderParameters.h`顶端,可以看到它的成员都有些啥.
+
+#### Creating the GBuffer(Geometry Buffer)
+
+GBuffer是一系列的渲染结果, 保存场景的Geometry信息, 像World Normal, Base Color, Roughness 等等. 用这些信息和光照计算最终的着色.
+
+GBuffer的具体内容是可配置的, 它的通道数和用处可以具体的设置决定.通常有5个GBuffer Textures, 从A~E:
+```
+GBufferA.rgb = World Normal
+GBufferA.alpha = PerObjectGBufferData
+GBufferB.rhba = Metallic, Specular, Roughness, ShadingModelID
+GBufferC.rgb = BaseColor
+GBufferC.alpha = GBufferAO
+GBufferD = Custom data
+GBufferE = Precomputed shadow factors
+```
+
+BasePassPixelShader.usf中的FPixelShaderInOut_MainPS函数是PixelShader的入口. 根据Lighting Model 和 开启的feature的不同, 计算GBuffer需要的数据. 这个函数最开始部分, 就是调用Material graph中实现的函数, 把得到的结果保存下来, 包括 BaseColor, Metallic, Specular, MaterialAO,  Roughness等.
+```c++
+half3 BaseColor = GetMaterialBaseColor(PixelMaterialInputs);
+half  Metallic = GetMaterialMetallic(PixelMaterialInputs);
+half  Specular = GetMaterialSpecular(PixelMaterialInputs);
+
+float MaterialAO = GetMaterialAmbientOcclusion(PixelMaterialInputs);
+float Roughness = GetMaterialRoughness(PixelMaterialInputs);
+float Anisotropy = GetMaterialAnisotropy(PixelMaterialInputs);
+uint ShadingModel = GetMaterialShadingModel(PixelMaterialInputs);
+
+half Opacity = GetMaterialOpacity(PixelMaterialInputs);
+```
+后面再根据具体的着色模型的不同对这些数据作进一步的处理. 例如, 当着色模型用了次表面散射时, 将会调用GetMaterialSubsurfaceData  计算次表面的颜色， 如果没有则为默认值0.
+
+在计算次表面颜色后, 开始计算`DBuffer Decals`对GBuffer的修改.
+
+往后再计算Opacity, 基于从Material graph获得的结果, 作一些volumetric lightmap calculations.
+
+最终创建FGBufferData结构体, 把代表当前像素的GBuffer 数据的值写进去.
+
+
+#### Setting the GBuffer Shading Model
+接下来, 让每个着色模型以自己的方式修改GBuffer. 调用定义在`ShadingModelsMaterial.ush`中的函数`SetGBufferForShadingModel`,
