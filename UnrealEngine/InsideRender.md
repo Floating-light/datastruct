@@ -102,4 +102,20 @@ half Opacity = GetMaterialOpacity(PixelMaterialInputs);
 
 
 #### Setting the GBuffer Shading Model
-接下来, 让每个着色模型以自己的方式修改GBuffer. 调用定义在`ShadingModelsMaterial.ush`中的函数`SetGBufferForShadingModel`,
+接下来, 调用定义在`ShadingModelsMaterial.ush`中的函数`SetGBufferForShadingModel`,让每个着色模型以自己的方式修改GBuffer. 通常都不会有什么修改, 一些着色模型会向GBuffer中的自定义数据通道添加额外的数据. 这个函数还会把ShadingModelID写到GBuffer中, 它只是一个整数值, 可以让DeferredPass直到这个Pixel是用的什么着色模型.
+
+
+如果想使用GBuffer中的自定义数据通道, 需要修改BasePassCommon.ush中的一个预处理宏 WRITES_CUSTOMDATA_TO_GBUFFER, 把自己定义的ShadingModel加上去, 不然自定义的数值会被消除.
+
+#### Using the Data
+现在, 每个LightingModel都可以选择把自己需要的数据写到FGBufferData结构体中, BasePassPixelShader中计算了通用的一些数据, 速度, 次表面颜色, 重写Roughness 等.
+
+然后, 把预计算的间接光照和天光数据(GetPrecomputedIndirectLightingAndSkyLight)添加到GBuffer的DiffuseColor中. 接下来还有Translucent, Vertex fogging, debugging 相关的代码, 最后, 调用EncodeGBuffer(DeferredShadingCommon.ush), 把FGBufferData输出到GBuffer纹理中.
+
+### Review
+BasePassPixelShader负责通过调用从MaterialGraph生成的函数采样多个PBR数据通道, 并写到一个FGBufferData结构体中, 后续基于不同的着色模型对这些数据进一步处理, 同时还会把ShadingModelID写进纹理, 这样后续就知道当前像素用的是什么着色模型. 最终FGBufferData中的数据被编码到多个RenderTarget中, 给后续的Pass使用.
+
+### Deferred Light Pixel Shader
+在DeferredLightPixelShaders.usf中, 会计算每一个Light对一个像素的影响, 为了减少计算量, 会用一个简单的VertexShader画出每个Light可能的影响范围, 例如点光源就是一个球形的范围, Spot Light就是一个锥形的范围.这相当于创建了一个Mask, 仅被这个Mask覆盖到Pxiel才需要计算光照.
+
+#### Shadowed and Unshadowed Lights
