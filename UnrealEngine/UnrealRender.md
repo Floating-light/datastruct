@@ -421,3 +421,23 @@ Lighting Mode, Volumetrix PerVextex Direction
 * Exposure
 * Motion Blur
 
+```c++
+struct FDrawSceneCommandName 
+{  
+	static const char* CStr() { return "FDrawSceneCommand"; } 
+	static const TCHAR* TStr() { return TEXT("FDrawSceneCommand"); } 
+}; 
+EnqueueUniqueRenderCommand<FDrawSceneCommandName>(
+			[SceneRenderer, DrawSceneEnqueue](FRHICommandListImmediate& RHICmdList)
+			{
+				const float StartDelayMillisec = FPlatformTime::ToMilliseconds(FPlatformTime::Cycles() - DrawSceneEnqueue);
+				CSV_CUSTOM_STAT_GLOBAL(DrawSceneCommand_StartDelay, StartDelayMillisec, ECsvCustomStatOp::Set);
+
+				RenderViewFamily_RenderThread(RHICmdList, SceneRenderer);
+				FlushPendingDeleteRHIResources_RenderThread();
+			});
+
+// --------------
+template<typename TSTR, typename LAMBDA>
+FORCEINLINE_DEBUGGABLE void EnqueueUniqueRenderCommand(LAMBDA&& Lambda);
+```
