@@ -20,5 +20,12 @@ Quality and Static 选项 ?
 Project Setting > Rendering
 
 ... 
+### Other 
+https://therealmjp.github.io/posts/shader-permutations-part1/
+https://blog.csdn.net/QQKeith/article/details/106630734
+
+大佬大佬: https://www.cnblogs.com/timlly/p/15092257.html
+
+Uber shader, shader permutation : https://www.gamedev.net/forums/topic/659145-what-is-a-uber-shader/
 
 NEXT https://medium.com/@lordned/ue4-rendering-part-6-adding-a-new-shading-model-e2972b40d72d
