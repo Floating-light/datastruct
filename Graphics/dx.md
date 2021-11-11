@@ -105,5 +105,8 @@ mCommandList->SetPipelineState(mPSO3.Get());
 /* …draw objects using PSO 3… */
 ```
 
-
+### Geometry helper structure
+为了方便Rendering 绘制, 可以用一个结构体将Vertex和Index buffer组织在一起.
+1. 保持对Vertex和Index的引用, 使这些数据可以被CPU访问(Picking , Collision detection).
+2. 缓存重要的属性: format, strike. 提供方法返回buffer view.
 
