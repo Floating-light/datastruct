@@ -4,7 +4,6 @@ D3D Initialize:
 
 IDXGIFactory   IDXGISwapChain, IDXGIDevice, IDXGIAdaper, 
 
-<<<<<<< HEAD
 ## Root Signatures
 
 定义绑定到Graphics Pipeline的资源类型.
@@ -21,7 +20,6 @@ Appendix:
 IA Input Assembler(装配)
 
 Tessellation Stages 曲面细分阶段
-=======
 Constant buffer:
 in heap : `D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV`. can store a mixture of `constant buffer`, `shader resource`, `unordered access descriptors`.
 
@@ -128,4 +126,3 @@ mCommandList->SetPipelineState(mPSO3.Get());
 1. 保持对Vertex和Index的引用, 使这些数据可以被CPU访问(Picking , Collision detection).
 2. 缓存重要的属性: format, strike. 提供方法返回buffer view.
 
->>>>>>> cdfc89fc201f42438a0e416f0f736be9893b4675
