@@ -222,3 +222,41 @@ delete MyRunnable;
 ```
 
 ## QueuedWork
+`QueuedWork`的基本想法是, 将需要多线程执行的任务放到一个任务队列中, 在线程池中的线程取出这些任务并执行.通常的用法, 首先需要实现需要多线程执行的Task:
+
+```c++
+class FExampleAsyncTask : public FNonAbandonableTask
+{
+	friend class FAsyncTask<FExampleAsyncTask>;
+	int32 ExampleData;
+	FExampleAsyncTask(int32 InData)
+		: ExampleData(InData)
+	{
+
+	}
+	void DoWork()
+	{
+		double Begin = FPlatformTime::Seconds();
+
+		UE_LOG(LogTemp, Display, TEXT("Begin DoWork Thread  : %s,Begin Seconds : %f "), *FThreadManager::Get().GetThreadName(FPlatformTLS::GetCurrentThreadId()),  Begin);
+		int MyRes = factorial(ExampleData);
+		UE_LOG(LogTemp, Display, TEXT("End DoWork Thread  : %s, Time cost : %f, The factorial of %d is %d  "), *FThreadManager::Get().GetThreadName(FPlatformTLS::GetCurrentThreadId()),  FPlatformTime::Seconds() - Begin, ExampleData, MyRes);
+	}
+
+	FORCEINLINE TStatId GetStatId() const
+	{
+		RETURN_QUICK_DECLARE_CYCLE_STAT(MyExampleAsyncTask, STATGROUP_ThreadPoolAsyncTasks);
+	}
+private:
+	int factorial(int N)
+	{
+		int res = 1;
+		for (int i = N; i > 1; i--)
+		{
+			res *= i;
+			FPlatformProcess::Sleep(1);
+		}
+		return res;
+	}
+};
+```
