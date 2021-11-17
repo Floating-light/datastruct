@@ -220,6 +220,7 @@ MyThread->WaitForCompletion();
 delete MyThread;
 delete MyRunnable;
 ```
+但是一般都不会直接用它, 而是基于它封装的另外两组多线程接口.
 
 ## QueuedWork
 `QueuedWork`的基本想法是, 将需要多线程执行的任务放到一个任务队列中, 在线程池中的线程取出这些任务并执行.通常的用法, 首先需要实现需要多线程执行的Task:
@@ -259,4 +260,123 @@ private:
 		return res;
 	}
 };
+```
+
+首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程.这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.
+![](./image/ThreadPool.png)
+通常我们创建的Work都在一个全局线程池`GThreadPool`中执行, 它是在Engine的启动流程中创建的, 池中的线程数由当前机器的核心数和是否是Server决定.
+```c++
+// int32 FEngineLoop::PreInitPreStartupScreen(const TCHAR* CmdLine)
+{
+	GThreadPool = FQueuedThreadPool::Allocate();
+	int32 NumThreadsInThreadPool = FPlatformMisc::NumberOfWorkerThreadsToSpawn();
+
+	// we are only going to give dedicated servers one pool thread
+	if (FPlatformProperties::IsServerOnly())
+	{
+		NumThreadsInThreadPool = 1;
+	}
+	verify(GThreadPool->Create(NumThreadsInThreadPool, StackSize * 1024, TPri_SlightlyBelowNormal, TEXT("ThreadPool")));
+}
+```
+`FQueuedThreadPool::Allocate()`返回的就是`FQueuedThreadPoolBase`的实例.其真正的创建过程是在`FQueuedThreadPoolBase::Create`, 直接创建给定数量的线程, 并添加到`AllThreads`和空闲线程队列中`QueuedThreads`.这里并不是直接创建的`FRunnableThread`, 而是创建`FQueuedThread(FRunnable)`, 而且线程队列中持有的也是它, 真正的线程由`FQueuedThread`自己创建并复制其生命周期:
+```c++
+// class FQueuedThread : public FRunnable
+virtual bool Create(class FQueuedThreadPoolBase* InPool,uint32 InStackSize = 0,EThreadPriority ThreadPriority=TPri_Normal)
+{
+	static int32 PoolThreadIndex = 0;
+	const FString PoolThreadName = FString::Printf( TEXT( "PoolThread %d" ), PoolThreadIndex );
+	PoolThreadIndex++;
+
+	OwningThreadPool = InPool;
+	DoWorkEvent = FPlatformProcess::GetSynchEventFromPool();
+	Thread = FRunnableThread::Create(this, *PoolThreadName, InStackSize, ThreadPriority, FPlatformAffinity::GetPoolThreadMask());
+	check(Thread);
+	return true;
+}
+```
+创建好的线程立即就会开始执行`FQueuedThread::Run()`:
+```c++
+uint32
+FQueuedThread::Run()
+{
+	while (!TimeToDie.Load(EMemoryOrder::Relaxed)) // shutdown 流程
+	{
+		// This will force sending the stats packet from the previous frame.
+		SET_DWORD_STAT(STAT_ThreadPoolDummyCounter, 0);
+		// We need to wait for shorter amount of time
+		bool bContinueWaiting = true;
+
+		// Unless we're collecting stats there doesn't appear to be any reason to wake
+		// up again until there's work to do (or it's time to die)
+
+#if STATS
+		if (FThreadStats::IsCollectingData())
+		{
+			while (bContinueWaiting)
+			{
+				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("FQueuedThread::Run.WaitForWork"), STAT_FQueuedThread_Run_WaitForWork, STATGROUP_ThreadPoolAsyncTasks);
+
+				// Wait for some work to do
+
+				bContinueWaiting = !DoWorkEvent->Wait(GDoPooledThreadWaitTimeouts ? 10 : MAX_uint32);
+			}
+		}
+#endif
+
+		if (bContinueWaiting)
+		{
+			DoWorkEvent->Wait();
+		}
+
+		IQueuedWork* LocalQueuedWork = QueuedWork;
+		QueuedWork = nullptr;
+		FPlatformMisc::MemoryBarrier();
+		check(LocalQueuedWork || TimeToDie.Load(EMemoryOrder::Relaxed)); // well you woke me up, where is the job or termination request?
+		while (LocalQueuedWork)
+		{
+			// Tell the object to do the work
+			LocalQueuedWork->DoThreadedWork();
+			// Let the object cleanup before we remove our ref to it
+			LocalQueuedWork = OwningThreadPool->ReturnToPoolOrGetNextJob(this);
+		}
+	}
+	return 0;
+}
+```
+至此整个线程队列就初始化完了, 随后就可以使用它多线程执行Work:
+```c++
+GThreadPool->AddQueuedWork(IQueuedWork* InWork);
+```
+其实现细节:
+```c++
+void AddQueuedWork(IQueuedWork* InQueuedWork) override
+{
+	check(InQueuedWork != nullptr);
+	// 如果处于shutdown过程中, 则不会执行Work.
+	if (TimeToDie)
+	{
+		InQueuedWork->Abandon();
+		return;
+	}
+	check(SynchQueue);
+	FQueuedThread* Thread = nullptr;
+	{
+		FScopeLock sl(SynchQueue);
+		const int32 AvailableThreadCount = QueuedThreads.Num();
+		if (AvailableThreadCount == 0)
+		{
+			// 没有空闲线程, 先放到Work队列中
+			QueuedWork.Add(InQueuedWork);
+			return;
+		}
+		const int32 ThreadIndex = AvailableThreadCount - 1;
+		// 取最近用过的线程
+		Thread = QueuedThreads[ThreadIndex];
+		// Remove it from the list so no one else grabs it
+		QueuedThreads.RemoveAt(ThreadIndex, 1, /* do not allow shrinking */ false);
+	}
+	// 有空闲线程, 直接DoWork.
+	Thread->DoWork(InQueuedWork);
+}
 ```
