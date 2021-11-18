@@ -202,7 +202,7 @@ FRunnableThreadPThread
 	FRunnableThreadAndroid
 FFakeThread
 FForkableThread
-FRunnableThreadHoloLens// 混合现实眼镜
+FRunnableThreadHoloLens
 ```
 所以, 这组API的使用流程大概就是:
 ```c++
@@ -261,8 +261,40 @@ private:
 	}
 };
 ```
+使用时:
+```c++
+FAsyncTask<FExampleAsyncTask>* MyTask = new FAsyncTask<FExampleAsyncTask>(10);
+// 开始执行
+MyTask->StartBackgroundTask();
 
-首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程.这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.
+// 可以在Tick中轮询
+if (MyTask->IsDone())
+{
+
+}
+
+MyTask->EnsureCompletion(); // 等待直到完成
+{
+	UE_LOG(LogPlayerController, Display, TEXT("Completion callback : %s "), * FThreadManager::Get().GetThreadName(FPlatformTLS::GetCurrentThreadId()));
+}
+delete MyTask;
+```
+`FAsyncTask`是Engine实现好的一种`IQueuedWork`, 提供了Work完成相关的同步操作, 当确保Work执行完之后要手动清除这个任务(或者重复利用). 
+
+还有一种`FAutoDeleteAsyncTask`, 会在执行完之后自动`delete this`(从Pool thread).
+```c++
+// FAutoDeleteAsyncTask::DoWork
+void DoWork()
+{
+	LLM_SCOPE(InheritedLLMTag);
+	FScopeCycleCounter Scope(Task.GetStatId(), true);
+
+	Task.DoWork();
+	delete this;
+}
+```
+### 实现
+首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程. 这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.
 ![](./image/ThreadPool.png)
 通常我们创建的Work都在一个全局线程池`GThreadPool`中执行, 它是在Engine的启动流程中创建的, 池中的线程数由当前机器的核心数和是否是Server决定.
 ```c++
@@ -279,7 +311,7 @@ private:
 	verify(GThreadPool->Create(NumThreadsInThreadPool, StackSize * 1024, TPri_SlightlyBelowNormal, TEXT("ThreadPool")));
 }
 ```
-`FQueuedThreadPool::Allocate()`返回的就是`FQueuedThreadPoolBase`的实例.其真正的创建过程是在`FQueuedThreadPoolBase::Create`, 直接创建给定数量的线程, 并添加到`AllThreads`和空闲线程队列中`QueuedThreads`.这里并不是直接创建的`FRunnableThread`, 而是创建`FQueuedThread(FRunnable)`, 而且线程队列中持有的也是它, 真正的线程由`FQueuedThread`自己创建并复制其生命周期:
+`FQueuedThreadPool::Allocate()`返回的就是`FQueuedThreadPoolBase`的实例.其真正的创建过程是在`FQueuedThreadPoolBase::Create`, 直接创建给定数量的线程, 并添加到`AllThreads`和空闲线程队列中`QueuedThreads`.这里并不是直接创建的`FRunnableThread`, 而是创建`FQueuedThread(FRunnable)`, 而且线程队列中持有的也是它, 真正的线程由`FQueuedThread`自己创建并负责其生命周期:
 ```c++
 // class FQueuedThread : public FRunnable
 virtual bool Create(class FQueuedThreadPoolBase* InPool,uint32 InStackSize = 0,EThreadPriority ThreadPriority=TPri_Normal)
@@ -306,10 +338,7 @@ FQueuedThread::Run()
 		SET_DWORD_STAT(STAT_ThreadPoolDummyCounter, 0);
 		// We need to wait for shorter amount of time
 		bool bContinueWaiting = true;
-
-		// Unless we're collecting stats there doesn't appear to be any reason to wake
-		// up again until there's work to do (or it's time to die)
-
+		// 仅在收集统计数据时才有可能在等待Work的中途唤醒.
 #if STATS
 		if (FThreadStats::IsCollectingData())
 		{
@@ -317,15 +346,14 @@ FQueuedThread::Run()
 			{
 				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("FQueuedThread::Run.WaitForWork"), STAT_FQueuedThread_Run_WaitForWork, STATGROUP_ThreadPoolAsyncTasks);
 
-				// Wait for some work to do
-
+				// GDoPooledThreadWaitTimeouts 是一个可配置的控制台变量, 默认false, 
 				bContinueWaiting = !DoWorkEvent->Wait(GDoPooledThreadWaitTimeouts ? 10 : MAX_uint32);
 			}
 		}
 #endif
-
 		if (bContinueWaiting)
 		{
+			// 在主线程中设置好`QueuedWork`之后触发
 			DoWorkEvent->Wait();
 		}
 
@@ -337,13 +365,16 @@ FQueuedThread::Run()
 		{
 			// Tell the object to do the work
 			LocalQueuedWork->DoThreadedWork();
-			// Let the object cleanup before we remove our ref to it
+			// 如果Work队列中有Work, 则给一个继续执行
+			// 没有 则加入到线程池空闲线程队列中, 并返回nullptr, 进入等待状态(等待触发DoWorkEvent)
 			LocalQueuedWork = OwningThreadPool->ReturnToPoolOrGetNextJob(this);
 		}
 	}
 	return 0;
 }
 ```
+创建好的`FQueuedThread`只存在两种状态, 要么被放在QueuedThread队列中, 处于空闲状态. 要么处于忙碌状态, 不停地从任务队列中取出任务来执行.
+
 至此整个线程队列就初始化完了, 随后就可以使用它多线程执行Work:
 ```c++
 GThreadPool->AddQueuedWork(IQueuedWork* InWork);
@@ -378,5 +409,30 @@ void AddQueuedWork(IQueuedWork* InQueuedWork) override
 	}
 	// 有空闲线程, 直接DoWork.
 	Thread->DoWork(InQueuedWork);
+}
+```
+很不幸在没有空闲线程时被加进来执行的任务会被放到任务队列中, 直到某个Thread干完活尝试执行下一个任务时才会执行:
+
+```c++
+IQueuedWork* ReturnToPoolOrGetNextJob(FQueuedThread* InQueuedThread)
+{
+	check(InQueuedThread != nullptr);
+	IQueuedWork* Work = nullptr;
+	// Check to see if there is any work to be done
+	FScopeLock sl(SynchQueue);
+	if (TimeToDie)
+	{
+		check(!QueuedWork.Num());  // we better not have anything if we are dying
+	}
+	if (QueuedWork.Num() > 0) // 尝试获取一个可以执行的Work
+	{
+		Work = QueuedWork[0];
+		QueuedWork.RemoveAt(0, 1, /* do not allow shrinking */ false);
+	}
+	if (!Work) // 没有可执行任务时, 加入到空闲线程队列中
+	{
+		QueuedThreads.Add(InQueuedThread);
+	}
+	return Work;
 }
 ```
