@@ -375,6 +375,32 @@ FQueuedThread::Run()
 ```
 创建好的`FQueuedThread`只存在两种状态, 要么被放在QueuedThread队列中, 处于空闲状态. 要么处于忙碌状态, 不停地从任务队列中取出任务来执行.
 
+`ReturnToPoolOrGetNextJob(this)`会尝试从任务队列中拿出一个Work继续执行, 如果没有, 则把传入的Thread加入到空闲线程队列中, 并进入休眠状态, 直到下一次调用`DoWork()`通过事件唤醒.
+
+```c++
+IQueuedWork* ReturnToPoolOrGetNextJob(FQueuedThread* InQueuedThread)
+{
+	check(InQueuedThread != nullptr);
+	IQueuedWork* Work = nullptr;
+	// Check to see if there is any work to be done
+	FScopeLock sl(SynchQueue);
+	if (TimeToDie)
+	{
+		check(!QueuedWork.Num());  // we better not have anything if we are dying
+	}
+	if (QueuedWork.Num() > 0) // 尝试获取一个可以执行的Work
+	{
+		Work = QueuedWork[0];
+		QueuedWork.RemoveAt(0, 1, /* do not allow shrinking */ false);
+	}
+	if (!Work) // 没有可执行任务时, 加入到空闲线程队列中
+	{
+		QueuedThreads.Add(InQueuedThread);
+	}
+	return Work;
+}
+```
+
 至此整个线程队列就初始化完了, 随后就可以使用它多线程执行Work:
 ```c++
 GThreadPool->AddQueuedWork(IQueuedWork* InWork);
@@ -411,28 +437,19 @@ void AddQueuedWork(IQueuedWork* InQueuedWork) override
 	Thread->DoWork(InQueuedWork);
 }
 ```
-很不幸在没有空闲线程时被加进来执行的任务会被放到任务队列中, 直到某个Thread干完活尝试执行下一个任务时才会执行:
-
+由于空闲线程队列中的线程都处于休眠状态`(DoWorkEvent->Wait())`, `DoWorkEvent->Trigger()`会唤醒当前thread, Work线程主循环和DoWork()对`QueuedWork`的读写都没有加锁, 这是在逻辑上保证了它们不会冲突. 为确保在多处理器情况下的写入同步, 每次对`QueuedWork`的更改后都需要调用`FPlatformMisc::MemoryBarrier()`, 以确保当前写入对其它处理器可见.
 ```c++
-IQueuedWork* ReturnToPoolOrGetNextJob(FQueuedThread* InQueuedThread)
+void DoWork(IQueuedWork* InQueuedWork)
 {
-	check(InQueuedThread != nullptr);
-	IQueuedWork* Work = nullptr;
-	// Check to see if there is any work to be done
-	FScopeLock sl(SynchQueue);
-	if (TimeToDie)
-	{
-		check(!QueuedWork.Num());  // we better not have anything if we are dying
-	}
-	if (QueuedWork.Num() > 0) // 尝试获取一个可以执行的Work
-	{
-		Work = QueuedWork[0];
-		QueuedWork.RemoveAt(0, 1, /* do not allow shrinking */ false);
-	}
-	if (!Work) // 没有可执行任务时, 加入到空闲线程队列中
-	{
-		QueuedThreads.Add(InQueuedThread);
-	}
-	return Work;
+	DECLARE_SCOPE_CYCLE_COUNTER( TEXT( "FQueuedThread::DoWork" ), STAT_FQueuedThread_DoWork, STATGROUP_ThreadPoolAsyncTasks );
+
+	check(QueuedWork == nullptr && "Can't do more than one task at a time");
+	// Tell the thread the work to be done
+	QueuedWork = InQueuedWork;
+	FPlatformMisc::MemoryBarrier();
+	// Tell the thread to wake up and do its job
+	DoWorkEvent->Trigger();
 }
 ```
+
+* https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
