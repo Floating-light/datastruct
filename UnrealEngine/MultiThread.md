@@ -452,4 +452,28 @@ void DoWork(IQueuedWork* InQueuedWork)
 }
 ```
 
+### IQueuedWork
+在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.
+
+## TaskGraph
+相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 指定前序任务和后序任务.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
+
+* https://zhuanlan.zhihu.com/p/38881269
+
+* https://michaeljcole.github.io/wiki.unrealengine.com/Multi-Threading:_Task_Graph_System/
