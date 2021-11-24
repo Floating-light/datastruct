@@ -459,13 +459,99 @@ void DoWork(IQueuedWork* InQueuedWork)
 相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 指定前序任务和后序任务.
 
 
+```c++
+FGraphEventRef Task1Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread).ConstructAndDispatchWhenReady(2,100000);
+```
+`TGraphTask<TTask>::CreateTask`返回的是一个Helper对象, 用于进一步构造这个Task.
+
+```c++
+static FConstructor CreateTask(const FGraphEventArray* Prerequisites = NULL, ENamedThreads::Type CurrentThreadIfKnown = ENamedThreads::AnyThread)
+{
+	int32 NumPrereq = Prerequisites ? Prerequisites->Num() : 0;
+	if (sizeof(TGraphTask) <= FBaseGraphTask::SMALL_TASK_SIZE)
+	{
+		void *Mem = FBaseGraphTask::GetSmallTaskAllocator().Allocate();
+		return FConstructor(new (Mem) TGraphTask(TTask::GetSubsequentsMode() == ESubsequentsMode::FireAndForget ? NULL : FGraphEvent::CreateGraphEvent(), NumPrereq), Prerequisites, CurrentThreadIfKnown);
+	}
+	return FConstructor(new TGraphTask(TTask::GetSubsequentsMode() == ESubsequentsMode::FireAndForget ? NULL : FGraphEvent::CreateGraphEvent(), NumPrereq), Prerequisites, CurrentThreadIfKnown);
+}
+```
+1. 如果当前Task的大小(< 256 bytes), 选择用自定义的Allocator, 否则直接new.
+2. 如果TTask::GetSubsequentsMode() 不是FireAndForget就创建FGraphEvent.
+3. 将new出来的TGraphTask传给FConstructor并返回.
+
+对返回的`FConstructor`, 可以调用`ConstructAndDispatchWhenReady`或`ConstructAndHold`, 它们都需要传入模板参数TTask的构造参数, 并都会用`Placement new`在前一步构造的FGraphTask的一块内存中构造TTask:
+```c++
+template<typename...T>
+FGraphEventRef ConstructAndDispatchWhenReady(T&&... Args)
+{
+	new ((void *)&Owner->TaskStorage) TTask(Forward<T>(Args)...);
+	return Owner->Setup(Prerequisites, CurrentThreadIfKnown);
+}
+
+template<typename...T>
+TGraphTask* ConstructAndHold(T&&... Args)
+{
+	new ((void *)&Owner->TaskStorage) TTask(Forward<T>(Args)...);
+	return Owner->Hold(Prerequisites, CurrentThreadIfKnown);
+}
+```
+其中`TaskStorage`就是一块`uint8[sizeof(TTask)]`的内存, 在`new TGraphTask`时就一起创建好了.
+```c++
+TAlignedBytes<sizeof(TTask),alignof(TTask)> TaskStorage;
+
+// -------------------
+template<int32 Size>
+struct TAlignedBytes<Size,1>
+{
+	uint8 Pad[Size];
+};
+```
+这两个函数不同的地方在于是调用TGraphTask的Setup()或Hold().而它们唯一的区别在于, Hold()会手动给前置依赖任务的计数器加上1, 以达到好像这里有一个任务没完成的效果. 直到调用`TGraphTask<FMyTask>->Unlock()`.`Setup()`在满足前置条件的情况下会直接执行.
 
 
+```c++
+// Setup() : bUnlock = true, Hold() : bUnlock = false
+void SetupPrereqs(const FGraphEventArray* Prerequisites, ENamedThreads::Type CurrentThreadIfKnown, bool bUnlock)
+{
+	checkThreadGraph(!TaskConstructed);
+	TaskConstructed = true;
+	TTask& Task = *(TTask*)&TaskStorage;
+	SetThreadToExecuteOn(Task.GetDesiredThread());
+	int32 AlreadyCompletedPrerequisites = 0;
+	if (Prerequisites)
+	{
+		for (int32 Index = 0; Index < Prerequisites->Num(); Index++)
+		{
+			FGraphEvent* Prerequisite = (*Prerequisites)[Index];
+			if (Prerequisite == nullptr || !Prerequisite->AddSubsequent(this))
+			{
+				AlreadyCompletedPrerequisites++;
+			}
+		}
+	}
+	PrerequisitesComplete(CurrentThreadIfKnown, AlreadyCompletedPrerequisites, bUnlock);
+}
+```
 
+在满足依赖条件之后, Task会被加入到TaskGraph中执行:
+```c++
+void QueueTask(ENamedThreads::Type CurrentThreadIfKnown)
+{
+	checkThreadGraph(LifeStage.Increment() == int32(LS_Queued));
+	FTaskGraphInterface::Get().QueueTask(this, ThreadToExecuteOn, CurrentThreadIfKnown);
+}
+```
 
+### FTaskGraphInterface
 
+`FTaskGraphInterface`定义了向外部提供的一组功能API, 真正的实现在`FTaskGraphImplementation`, 其创建在`Engine`初始化阶段
 
-
+```c++
+//  LaunchEngineLoop.cpp Line: 2018
+FTaskGraphInterface::Startup(FPlatformMisc::NumberOfCores());
+FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread);
+```
 
 
 
@@ -477,3 +563,5 @@ void DoWork(IQueuedWork* InQueuedWork)
 * https://zhuanlan.zhihu.com/p/38881269
 
 * https://michaeljcole.github.io/wiki.unrealengine.com/Multi-Threading:_Task_Graph_System/
+
+* https://zhuanlan.zhihu.com/p/57928032
