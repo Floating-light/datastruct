@@ -552,10 +552,73 @@ void QueueTask(ENamedThreads::Type CurrentThreadIfKnown)
 FTaskGraphInterface::Startup(FPlatformMisc::NumberOfCores());
 FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread);
 ```
+`Startup()`主要作用是创建指定数量的`WorkerThreads`,一个Worker由一个Runnable对象和一个前面提到的FRunnableThread组成.
+```c++
+struct FWorkerThread
+{
+	FTaskThreadBase*	TaskGraphWorker;
+	FRunnableThread*	RunnableThread;
+	bool				bAttached;
+};
+```
+TaskGraph中的工作线程主要分两种, 一种是NamedThread(external thread)和UnamedThread(也称作AnyThread, internal thread),NamedThread是有着明确的意义的Thread, 其中通常只执行一类任务, 目前有下面5种:
+```c++
+StatsThread, 
+RHIThread,
+AudioThread,
+GameThread,
+ActualRenderingThread = GameThread + 1,
+``` 
+`TaskGraph`中一定会创建这几个基本NamedThread, 并至少创建一个UnamedThread, 在此基础上, 核心数越多UnamedThread的数量越多.
+首先会创建所有WorkerThreads的Runnable:
+```c++
+if (bAnyTaskThread)
+{
+	WorkerThreads[ThreadIndex].TaskGraphWorker = new FTaskThreadAnyThread(ThreadIndexToPriorityIndex(ThreadIndex));
+}
+else
+{
+	WorkerThreads[ThreadIndex].TaskGraphWorker = new FNamedTaskThread;
+}
+```
+显然NamedThread和AnyThread有着不同的FRunnable的实现.随后, 对于UnamedThread会马上创建对应的`FRunnableThread`, 创建好后, 这些Worker马上就进入等待执行任务的状态:
+```c++
+WorkerThreads[ThreadIndex].RunnableThread = FRunnableThread::Create(&Thread(ThreadIndex), *Name, StackSize, ThreadPri, Affinity); 
 
+WorkerThreads[ThreadIndex].bAttached = true;
+```
+而对于NamedThread,其真正的Thread对象都是在外部相应的功能模块创建的, 甚至GameThread就是主线程本身, 所以NamedThreadWorker是没有Thread对象的,所有需要NamedThread执行的任务, 就会加到对应`TaskGraphWorker`的队列中, 在这些外部创建的NamedThread中会在恰当的时机将这些任务取出并执行.比如GameThread的Task, 是在Game主循环的每一帧末尾同步的时候:
+```c++
+bool bEmptyGameThreadTasks = !FTaskGraphInterface::Get().IsThreadProcessingTask(ENamedThreads::GameThread);
 
+if (bEmptyGameThreadTasks)
+{
+	// need to process gamethread tasks at least once a frame no matter what
+	FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
+}
+```
+这里会找到之前创建的Worker, 把需要GameThread执行的所有Work执行完毕才会返回.
 
+在`FTaskGraphInterface::Startup()`之后, 基本上就完成了TaskGraph的初始化.
 
+对于AudioThread, 其在外部创建了它的Thread对象和对应的Runnable, 在AudioThreadRunnable的Run()函数中调用了
+```c++
+void AudioThreadMain( FEvent* TaskGraphBoundSyncEvent )
+{
+	FTaskGraphInterface::Get().AttachToThread(ENamedThreads::AudioThread);
+	FPlatformMisc::MemoryBarrier();
+
+	// Inform main thread that the audio thread has been attached to the taskgraph and is ready to receive tasks
+	if( TaskGraphBoundSyncEvent != nullptr )
+	{
+		TaskGraphBoundSyncEvent->Trigger();
+	}
+
+	FTaskGraphInterface::Get().ProcessThreadUntilRequestReturn(ENamedThreads::AudioThread);
+	FPlatformMisc::MemoryBarrier();
+}
+```
+而`FTaskGraphInterface::Get().ProcessThreadUntilRequestReturn(ENamedThreads::AudioThread)`则会找到之前创建的AudioThread的FNamedTaskThread, 在其中一直循环执行给AudioThread的任务.
 
 
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
