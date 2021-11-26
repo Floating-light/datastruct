@@ -458,6 +458,8 @@ void DoWork(IQueuedWork* InQueuedWork)
 ## TaskGraph
 相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 指定前序任务和后序任务.
 
+`FBaseGraphTask`主要完成Task多线程执行的逻辑, 即将自己加入到TaskGraphInterface中指定线程的任务队列中,与FTaskGraphInterface的耦合.
+
 ```c++
 class FBaseGraphTask
 {
@@ -517,134 +519,57 @@ private:
 	FThreadSafeCounter			NumberOfPrerequistitesOutstanding; 
 };
 ```
-`FBaseGraphTask`主要完成Task任务执行的接口的定义, 任务入队和前置条件计数逻辑的实现, 主要是和GraphTask系统其它部分交互的方法.
+
+`FGraphEvent`表示一个Task完成的事件.所以`FGraphEvent`总是和一个Task相关, 它也是在一个Task初始化的时候创建的.`FGraphEvent`实现了Task之间的依赖关系, 在一个Task执行完成之后, 与其相关的Event就算完成了, 马上Event就会处理所有依赖于自己的后续Task(FBaseGraphTask->ConditionalQueueTask).
+
 ```c++
 class FGraphEvent 
 {
 public:
-	// 添加一个任务作为后续任务, 如果此事件已经Fired, 将返回false, 此事件无法作为前置事件.
+	// 添加一个任务作为后续任务, 如果此事件已经Fired, 将返回false, 表明此事件无法作为前置事件.
+	// 通常一个被依赖的事件会作为参数, 其后序Task构造时传入, 调用PrerequisiteEvent->AddSubsequent(this)
 	bool AddSubsequent(class FBaseGraphTask* Task)
 	{
 		return SubsequentList.PushIfNotClosed(Task);
 	}
 
 	// 给定一个事件作为当前事件完成的条件之一.
+	// 仅在执行关联的Task期间有效.也就是说一个Task在执行时可以添加自己的子Task, 且仅当子Task完成时自己才算完成.
 	void DontCompleteUntil(FGraphEventRef EventToWaitFor)
 	{
 		checkThreadGraph(!IsComplete()); 
 		new (EventsToWaitFor) FGraphEventRef(EventToWaitFor);
 	}
 
-	/**
-	 *	"Complete" the event. This grabs the list of subsequents and atomically closes it. Then for each subsequent it reduces the number of prerequisites outstanding and if that drops to zero, the task is queued.
-	 *	@param CurrentThreadIfKnown if the current thread is known, provide it here. Otherwise it will be determined via TLS if any task ends up being queued.
-	**/
+	// 在关联的Task执行完成之后调用, 会调用所有后续Task(SubsequentList)的`ConditionalQueueTask`, 将这些Task的前置任务计数减一, 为0时就queue
 	CORE_API void DispatchSubsequents(ENamedThreads::Type CurrentThreadIfKnown = ENamedThreads::AnyThread);
 
-	/**
-	 *	"Complete" the event. This grabs the list of subsequents and atomically closes it. Then for each subsequent and for each item in "NewTasks" it reduces the number of prerequisites outstanding and if that drops to zero, the task is queued. 
-	 * @param NewTasks subsequents to add
-	 *	@param	 CurrentThreadIfKnown if the current thread is known, provide it here. Otherwise it will be determined via TLS if any task ends up being queued.
-	**/
+	// 和前面一样, 只是将NewTasks也作为后续Task.
 	CORE_API void DispatchSubsequents(TArray<FBaseGraphTask*>& NewTasks, ENamedThreads::Type CurrentThreadIfKnown = ENamedThreads::AnyThread);
 
-	/**
-	 *	Determine if the event has been completed. This can be used to poll for completion. 
-	 *	@return true if this event has completed. 
-	 *	CAUTION: If this returns false, the event could still end up completing before this function even returns. In other words, a false return does not mean that event is not yet completed!
-	**/
+    // 判断是否完成.
 	bool IsComplete() const
 	{
 		return SubsequentList.IsClosed();
 	}
 
-	/**
-	 * A convenient short version of `FTaskGraphInterface::WaitUntilTaskCompletes`
-	 */
 	void Wait(ENamedThreads::Type CurrentThreadIfKnown = ENamedThreads::AnyThread)
 	{
 		FTaskGraphInterface::Get().WaitUntilTaskCompletes(this, CurrentThreadIfKnown);
 	}
-
-	/**
-	 * Sets a name for the event for debugging purposes.
-	 */
-#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
-	void SetDebugName(const TCHAR* Name)
-	{
-		DebugName = Name;
-	}
-#endif
-
-private:
-	friend class TRefCountPtr<FGraphEvent>;
-	friend class TLockFreeClassAllocator_TLSCache<FGraphEvent, PLATFORM_CACHE_LINE_SIZE>;
-
-	/** 
-	 *	Internal function to call the destructor and recycle a graph event
-	 *	@param ToRecycle; graph event to recycle
-	**/
-	static CORE_API void Recycle(FGraphEvent* ToRecycle);
-
-	/**
-	 *	Hidden Constructor
-	**/
-	friend struct FGraphEventAndSmallTaskStorage;
-	FGraphEvent(bool bInInline = false)
-		: ThreadToDoGatherOn(ENamedThreads::AnyHiPriThreadHiPriTask)
-	{
-	}
-
-	/**
-	 *	Destructor. Verifies we aren't destroying it prematurely. 
-	**/
-	~FGraphEvent();
-
-	// Interface for TRefCountPtr
-
-public:
-	/** 
-	 *	Increases the reference count 
-	 *	@return the new reference count
-	**/
-	uint32 AddRef()
-	{
-		int32 RefCount = ReferenceCount.Increment();
-		checkThreadGraph(RefCount > 0);
-		return RefCount;
-	}
-	/** 
-	 *	Decreases the reference count and destroys the graph event if it is zero.
-	 *	@return the new reference count
-	**/
-	uint32 Release()
-	{
-		int32 RefCount = ReferenceCount.Decrement();
-		checkThreadGraph(RefCount >= 0);
-		if (RefCount == 0)
-		{
-			Recycle(this);
-		}
-		return RefCount;
-	}
-
-
 private:
 
-	/** Threadsafe list of subsequents for the event **/
+	// 线程安全的无锁Subsequents链表
 	TClosableLockFreePointerListUnorderedSingleConsumer<FBaseGraphTask, 0>	SubsequentList;
-	/** List of events to wait for until firing. This is not thread safe as it is only legal to fill it in within the context of an executing task. **/
+	// 非线程安全, 仅在执行Task的Context下添加 
 	FGraphEventArray														EventsToWaitFor;
-	/** Number of outstanding references to this graph event **/
+
 	FThreadSafeCounter														ReferenceCount;
 	ENamedThreads::Type														ThreadToDoGatherOn;
-
-#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
-	const TCHAR* DebugName = nullptr;
-#endif
 };
 
 ```
+`EventsToWaitFor`是在执行Task的业务逻辑(FMyTask::DoTask)中添加的子Task, 
 
 ```c++
 FGraphEventRef Task1Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread).ConstructAndDispatchWhenReady(2,100000);
