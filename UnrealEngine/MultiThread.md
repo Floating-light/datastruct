@@ -600,31 +600,154 @@ struct FWorkerThread
 	bool				bAttached;
 };
 ```
-
-其中一定会创建这几个基本NamedThread, 并至少创建一个UnamedThread, 在此基础上, 核心数越多UnamedThread的数量越多.
+其中一定会创建这几个基本NamedThread, 并至少创建一个UnamedThread, 在此基础上, 核心数越多UnamedThread的数量越多.一般情况下每种优先级的Anythread都有和核心数-1一样的线程数, 但被限制不能超过26个,5 + 3*26 = 83, 即最大线程数.
 首先会创建所有WorkerThreads的Runnable:
 ```c++
-if (bAnyTaskThread)
-{
-	WorkerThreads[ThreadIndex].TaskGraphWorker = new FTaskThreadAnyThread(ThreadIndexToPriorityIndex(ThreadIndex));
-}
-else
-{
-	WorkerThreads[ThreadIndex].TaskGraphWorker = new FNamedTaskThread;
-}
+	FTaskGraphImplementation(int32)
+	{
+		bCreatedHiPriorityThreads = !!ENamedThreads::bHasHighPriorityThreads;
+		bCreatedBackgroundPriorityThreads = !!ENamedThreads::bHasBackgroundThreads;
+
+		int32 MaxTaskThreads = MAX_THREADS; // 83
+		int32 NumTaskThreads = FPlatformMisc::NumberOfWorkerThreadsToSpawn();
+
+		// if we don't want any performance-based threads, then force the task graph to not create any worker threads, and run in game thread
+		if (!FTaskGraphInterface::IsMultithread())
+		{
+			// this is the logic that used to be spread over a couple of places, that will make the rest of this function disable a worker thread
+			// @todo: it could probably be made simpler/clearer
+			// this - 1 tells the below code there is no rendering thread
+			MaxTaskThreads = 1;
+			NumTaskThreads = 1;
+			LastExternalThread = (ENamedThreads::Type)(ENamedThreads::ActualRenderingThread - 1);
+			bCreatedHiPriorityThreads = false;
+			bCreatedBackgroundPriorityThreads = false;
+			ENamedThreads::bHasBackgroundThreads = 0;
+			ENamedThreads::bHasHighPriorityThreads = 0;
+		}
+		else
+		{
+			LastExternalThread = ENamedThreads::ActualRenderingThread;
+
+			if (FForkProcessHelper::IsForkedMultithreadInstance())
+			{
+				NumTaskThreads = CVar_ForkedProcess_MaxWorkerThreads;
+			}
+		}
+		
+		NumNamedThreads = LastExternalThread + 1;
+		// Anythread的优先级总数, 一般有三种优先级
+		NumTaskThreadSets = 1 + bCreatedHiPriorityThreads + bCreatedBackgroundPriorityThreads;
+
+		// if we don't have enough threads to allow all of the sets asked for, then we can't create what was asked for.
+		check(NumTaskThreadSets == 1 || FMath::Min<int32>(NumTaskThreads * NumTaskThreadSets + NumNamedThreads, MAX_THREADS) == NumTaskThreads * NumTaskThreadSets + NumNamedThreads);
+		NumThreads = FMath::Max<int32>(FMath::Min<int32>(NumTaskThreads * NumTaskThreadSets + NumNamedThreads, MAX_THREADS), NumNamedThreads + 1);
+
+		// Cap number of extra threads to the platform worker thread count
+		// if we don't have enough threads to allow all of the sets asked for, then we can't create what was asked for.
+		check(NumTaskThreadSets == 1 || FMath::Min(NumThreads, NumNamedThreads + NumTaskThreads * NumTaskThreadSets) == NumThreads);
+		NumThreads = FMath::Min(NumThreads, NumNamedThreads + NumTaskThreads * NumTaskThreadSets);
+		// AnyThread每一个优先级拥有的线程总数
+		NumTaskThreadsPerSet = (NumThreads - NumNamedThreads) / NumTaskThreadSets;
+		check((NumThreads - NumNamedThreads) % NumTaskThreadSets == 0); // should be equal numbers of threads per priority set
+
+		UE_LOG(LogTaskGraph, Log, TEXT("Started task graph with %d named threads and %d total threads with %d sets of task threads."), NumNamedThreads, NumThreads, NumTaskThreadSets);
+		check(NumThreads - NumNamedThreads >= 1);  // need at least one pure worker thread
+		check(NumThreads <= MAX_THREADS);
+		check(!ReentrancyCheck.GetValue()); // reentrant?
+		ReentrancyCheck.Increment(); // just checking for reentrancy
+		PerThreadIDTLSSlot = FPlatformTLS::AllocTlsSlot();
+
+		for (int32 ThreadIndex = 0; ThreadIndex < NumThreads; ThreadIndex++)
+		{
+			check(!WorkerThreads[ThreadIndex].bAttached); // reentrant?
+			bool bAnyTaskThread = ThreadIndex >= NumNamedThreads;
+			if (bAnyTaskThread)
+			{
+				WorkerThreads[ThreadIndex].TaskGraphWorker = new FTaskThreadAnyThread(ThreadIndexToPriorityIndex(ThreadIndex));
+			}
+			else
+			{
+				WorkerThreads[ThreadIndex].TaskGraphWorker = new FNamedTaskThread;
+			}
+			WorkerThreads[ThreadIndex].TaskGraphWorker->Setup(ENamedThreads::Type(ThreadIndex), PerThreadIDTLSSlot, &WorkerThreads[ThreadIndex]);
+		}
+
+		TaskGraphImplementationSingleton = this; // now reentrancy is ok
+
+		const TCHAR* PrevGroupName = nullptr;
+		for (int32 ThreadIndex = LastExternalThread + 1; ThreadIndex < NumThreads; ThreadIndex++)
+		{
+			FString Name;
+			const TCHAR* GroupName = TEXT("TaskGraphNormal");
+			int32 Priority = ThreadIndexToPriorityIndex(ThreadIndex);
+            // These are below normal threads so that they sleep when the named threads are active
+			EThreadPriority ThreadPri;
+			uint64 Affinity = FPlatformAffinity::GetTaskGraphThreadMask();
+			if (Priority == 1)
+			{
+				Name = FString::Printf(TEXT("TaskGraphThreadHP %d"), ThreadIndex - (LastExternalThread + 1));
+				GroupName = TEXT("TaskGraphHigh");
+				ThreadPri = TPri_SlightlyBelowNormal; // we want even hi priority tasks below the normal threads
+
+				// If the platform defines FPlatformAffinity::GetTaskGraphHighPriorityTaskMask then use it
+				if (FPlatformAffinity::GetTaskGraphHighPriorityTaskMask() != 0xFFFFFFFFFFFFFFFF)
+				{
+					Affinity = FPlatformAffinity::GetTaskGraphHighPriorityTaskMask();
+				}
+			}
+			else if (Priority == 2)
+			{
+				Name = FString::Printf(TEXT("TaskGraphThreadBP %d"), ThreadIndex - (LastExternalThread + 1));
+				GroupName = TEXT("TaskGraphLow");
+				ThreadPri = TPri_Lowest;
+				// If the platform defines FPlatformAffinity::GetTaskGraphBackgroundTaskMask then use it
+				if ( FPlatformAffinity::GetTaskGraphBackgroundTaskMask() != 0xFFFFFFFFFFFFFFFF )
+				{
+					Affinity = FPlatformAffinity::GetTaskGraphBackgroundTaskMask();
+				}
+			}
+			else
+			{
+				Name = FString::Printf(TEXT("TaskGraphThreadNP %d"), ThreadIndex - (LastExternalThread + 1));
+				ThreadPri = TPri_BelowNormal; // we want normal tasks below normal threads like the game thread
+			}
+#if WITH_EDITOR
+			uint32 StackSize = 1024 * 1024;
+#elif ( UE_BUILD_SHIPPING || UE_BUILD_TEST )
+			uint32 StackSize = 384 * 1024;
+#else
+			uint32 StackSize = 512 * 1024;
+#endif
+			if (GroupName != PrevGroupName)
+			{
+				Trace::ThreadGroupEnd();
+				Trace::ThreadGroupBegin(GroupName);
+				PrevGroupName = GroupName;
+			}
+
+            // We only create forkable threads on the Forked instance since the TaskGraph needs to be shutdown and recreated to properly make the switch from singlethread to multithread.
+			if (FForkProcessHelper::IsForkedMultithreadInstance() && GAllowTaskGraphForkMultithreading)
+			{
+				WorkerThreads[ThreadIndex].RunnableThread = FForkProcessHelper::CreateForkableThread(&Thread(ThreadIndex), *Name, StackSize, ThreadPri, Affinity);
+			}
+			else
+			{
+				WorkerThreads[ThreadIndex].RunnableThread = FRunnableThread::Create(&Thread(ThreadIndex), *Name, StackSize, ThreadPri, Affinity); 
+			}
+			
+			WorkerThreads[ThreadIndex].bAttached = true;
+		}
+		Trace::ThreadGroupEnd();
+	}
 ```
 显然NamedThread和AnyThread有着不同的FRunnable的实现.随后, 对于UnamedThread会马上创建对应的`FRunnableThread`, 所有AnyThread都会被指定优先级, 即前面提到的三种优先级, 所有AnyThread会被平均分为三种优先级, 这些Worker马上就进入等待执行任务的状态:
-```c++
-WorkerThreads[ThreadIndex].RunnableThread = FRunnableThread::Create(&Thread(ThreadIndex), *Name, StackSize, ThreadPri, Affinity); 
-
-WorkerThreads[ThreadIndex].bAttached = true;
-```
 
 ![threadNum](./taskgraph_threadNum.png)
-taskgraph_threadNum.png
+
 三种优先级的AnyThread使用不同的Tread优先级任务队列`IncomingAnyThreadTasks[2]`, 由`FTaskGraphImplementation`持有, 没有显式指定优先级的Task就是`NormalThreadPriority`. 每一种Thread优先级都有两个队列, 表示Task的优先级,这些队列都是无锁实现. 这些Thread会根据自己的优先级到相应的队列中取出Task执行.
 
-而NamedThread不会创建`FRunnableThread`, 它们真正执行`Task`的`Thread`由对应的模块创建, 并自己调用`FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread)`和对应的`Worker`相关联.在`NamedThread`的`FNamedTaskThread`的实现中, 持有两个任务队列, 所有期望`NamedThread`执行的`Task`都会入队到各自的队列中, 真正的`NamedThread`在恰当的时候调用`FTaskGraphInterface`的接口执行自己队列中的任务.
+而`NamedThread`不会创建`FRunnableThread`, 它们真正执行`Task`的`Thread`由对应的模块创建, 并自己调用`FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread)`和对应的`Worker`相关联.在`NamedThread`的`FNamedTaskThread`的实现中, 持有两个任务队列, 所有期望`NamedThread`执行的`Task`都会入队到各自的队列中, 真正的`NamedThread`在恰当的时候调用`FTaskGraphInterface`的接口执行自己队列中的任务.
 
 比如GameThread主队列中的Task, 是在Game主循环的每一帧末尾同步的时候:
 ```c++
@@ -659,12 +782,13 @@ void AudioThreadMain( FEvent* TaskGraphBoundSyncEvent )
 这里`ProcessThreadUntilRequestReturn`会进入AudioThread的`TaskGraphWorker`中循环执行AudioThread的Task.
 
 ### FBaseGraphTask
-`FBaseGraphTask`向`FTaskGraphInterface`提供具体Task执行的入口`Execute`, 主要完成Task多线程执行的逻辑, 处理与FTaskGraphInterface的耦合.还有前置依赖Task的计数.
+`FBaseGraphTask`向`FTaskGraphInterface`提供具体Task执行的入口`Execute`, 处理与FTaskGraphInterface的耦合.还有前置依赖Task的计数, 用于确定何时将Task放入TaskGraph队列中.而具体依赖关系的实现并不是在这处理,而是给唯一子类`TGraphTask<TTask>`, 还有`Execute`的实现, 这也与`FGraphEvent`相关.
 
 ```c++
 class FBaseGraphTask
 {
 protected:
+	// InThreadToExecuteOn 不仅仅包含 期望执行的Thread, 还可以包含期望执行的Thread的优先级, Task本身的优先级. 如果是NamedThread, 还有队列索引.
 	void SetThreadToExecuteOn(ENamedThreads::Type InThreadToExecuteOn)
 	{
 		ThreadToExecuteOn = InThreadToExecuteOn;
@@ -774,7 +898,7 @@ private:
 
 ### TGraphTask<TTask>
 
-`TGraphTask<TTask>`嵌入用户定义的Task, 并依赖于FGraphEventRef处理前置和后续Task.
+`TGraphTask<TTask>`嵌入用户定义的Task, 并依赖于FGraphEvent处理前置和后续Task.
 ```c++
 template<typename TTask>
 class TGraphTask final : public FBaseGraphTask
@@ -953,8 +1077,64 @@ private:
 ### 使用
 假如我们需要得到很多素数,希望能够多线程快速计算出来,首先需要实现一个TTask:
 ```c++
+class FMyTask
+{
+public:
+	//[InBegin, InEnd]
+	FMyTask(int32  InBegin, int32 InEnd) 
+		: Begin(InBegin), End(InEnd)
+	{
+	}
+	~FMyTask()
+	{
+	}
+	FORCEINLINE TStatId GetStatId() const
+	{
+		RETURN_QUICK_DECLARE_CYCLE_STAT(FGenericTask, STATGROUP_TaskGraphTasks);
+	}
+	static FORCEINLINE ESubsequentsMode::Type GetSubsequentsMode() { return ESubsequentsMode::TrackSubsequents; }
 
-
+	ENamedThreads::Type GetDesiredThread()
+	{
+		return ENamedThreads::AnyThread;
+	}
+	void DoTask(ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent)
+	{
+		//MyCompletionGraphEvent->DontCompleteUntil(TGraphTask<FSomeChildTask>::CreateTask(NULL, CurrentThread).ConstructAndDispatchWhenReady());
+		const FString ExcThreadName =  FThreadManager::Get().GetThreadName(FPlatformTLS::GetCurrentThreadId());
+		const double BeginTime = FPlatformTime::Seconds();
+		UE_LOG(LogTemp, Display, TEXT("Begin %s in thread : %s "), TEXT(__FUNCTION__), *ExcThreadName);
+		int32 RealBegin = FMath::Max(2, Begin);
+		for (int i = RealBegin; i <= End; ++i)
+		{
+			bool isPrime = true;
+			for (int j = 2; j <= i / 2; ++j)
+			{
+				if (i % j == 0)
+				{
+					isPrime = false;
+					break;
+				}
+			}
+			if (isPrime)
+			{
+				Res.Add(i);
+			}
+		}
+		FString DebugStr = FString::Printf(TEXT("Find primer in range [%d, %d], total %d : %s"), Begin, End, Res.Num(), "[");
+		for (int i = 0; i < Res.Num(); ++i)
+		{
+			DebugStr += FString::FromInt(Res[i]);
+			DebugStr += ", ";
+		}
+		DebugStr += "]";
+		UE_LOG(LogTemp, Display, TEXT("End %s in thread: %s ,time %f, Result : %s \n"), __FUNCTIONW__, *ExcThreadName, FPlatformTime::Seconds() - BeginTime,  * DebugStr);
+	    //https://answers.unrealengine.com/questions/347305/is-ue-log-thread-safe.html?sort=oldest
+	}
+	TArray<int32 > Res;
+	int32 Begin;
+	int32 End;
+};
 ```
 这个Task完成的主要任务就是找到Range[]中的所有素数.
 
