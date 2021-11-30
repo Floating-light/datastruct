@@ -1136,7 +1136,7 @@ public:
 	int32 End;
 };
 ```
-这个Task完成的主要任务就是找到Range[]中的所有素数.
+这个Task完成的主要任务就是找到Range[Begin, End]中的所有素数.
 
 ```c++
 FGraphEventRef Task1Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread).ConstructAndDispatchWhenReady(2,100000);
@@ -1220,73 +1220,133 @@ void QueueTask(ENamedThreads::Type CurrentThreadIfKnown)
 	FTaskGraphInterface::Get().QueueTask(this, ThreadToExecuteOn, CurrentThreadIfKnown);
 }
 ```
-
+`NP`是`NormalThreadPriority`的缩写, 表明是在正常优先级的线程执行的。
 ```c++
-virtual void QueueTask(FBaseGraphTask* Task, ENamedThreads::Type ThreadToExecuteOn, ENamedThreads::Type InCurrentThreadIfKnown = ENamedThreads::AnyThread) final override
-{
-	TASKGRAPH_SCOPE_CYCLE_COUNTER(2, STAT_TaskGraph_QueueTask);
-
-	if (ENamedThreads::GetThreadIndex(ThreadToExecuteOn) == ENamedThreads::AnyThread)
-	{
-		TASKGRAPH_SCOPE_CYCLE_COUNTER(3, STAT_TaskGraph_QueueTask_AnyThread);
-		if (FTaskGraphInterface::IsMultithread())
-		{
-			uint32 TaskPriority = ENamedThreads::GetTaskPriority(Task->ThreadToExecuteOn);
-			int32 Priority = ENamedThreads::GetThreadPriorityIndex(Task->ThreadToExecuteOn);
-			if (Priority == (ENamedThreads::BackgroundThreadPriority >> ENamedThreads::ThreadPriorityShift) && (!bCreatedBackgroundPriorityThreads || !ENamedThreads::bHasBackgroundThreads))
-			{
-				Priority = ENamedThreads::NormalThreadPriority >> ENamedThreads::ThreadPriorityShift; // we don't have background threads, promote to normal
-				TaskPriority = ENamedThreads::NormalTaskPriority >> ENamedThreads::TaskPriorityShift; // demote to normal task pri
-			}
-			else if (Priority == (ENamedThreads::HighThreadPriority >> ENamedThreads::ThreadPriorityShift) && (!bCreatedHiPriorityThreads || !ENamedThreads::bHasHighPriorityThreads))
-			{
-				Priority = ENamedThreads::NormalThreadPriority >> ENamedThreads::ThreadPriorityShift; // we don't have hi priority threads, demote to normal
-				TaskPriority = ENamedThreads::HighTaskPriority >> ENamedThreads::TaskPriorityShift; // promote to hi task pri
-			}
-			uint32 PriIndex = TaskPriority ? 0 : 1;
-			check(Priority >= 0 && Priority < MAX_THREAD_PRIORITIES);
-			{
-				TASKGRAPH_SCOPE_CYCLE_COUNTER(4, STAT_TaskGraph_QueueTask_IncomingAnyThreadTasks_Push);
-				int32 IndexToStart = IncomingAnyThreadTasks[Priority].Push(Task, PriIndex);
-				if (IndexToStart >= 0)
-				{
-					StartTaskThread(Priority, IndexToStart);
-				}
-			}
-			return;
-		}
-		else
-		{
-			ThreadToExecuteOn = ENamedThreads::GameThread;
-		}
-	}
-	ENamedThreads::Type CurrentThreadIfKnown;
-	if (ENamedThreads::GetThreadIndex(InCurrentThreadIfKnown) == ENamedThreads::AnyThread)
-	{
-		CurrentThreadIfKnown = GetCurrentThread();
-	}
-	else
-	{
-		CurrentThreadIfKnown = ENamedThreads::GetThreadIndex(InCurrentThreadIfKnown);
-		checkThreadGraph(CurrentThreadIfKnown == ENamedThreads::GetThreadIndex(GetCurrentThread()));
-	}
-	{
-		int32 QueueToExecuteOn = ENamedThreads::GetQueueIndex(ThreadToExecuteOn);
-		ThreadToExecuteOn = ENamedThreads::GetThreadIndex(ThreadToExecuteOn);
-		FTaskThreadBase* Target = &Thread(ThreadToExecuteOn);
-		if (ThreadToExecuteOn == ENamedThreads::GetThreadIndex(CurrentThreadIfKnown))
-		{
-			Target->EnqueueFromThisThread(QueueToExecuteOn, Task);
-		}
-		else
-		{
-			Target->EnqueueFromOtherThread(QueueToExecuteOn, Task);
-		}
-	}
-}
+LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 0 
+LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 0 ,time 0.610057, Result : Find primer in range [2, 100000], total 9592 : [2, 3, 5, 7, 11, 13, 17, 19, ... ...]
 ```
 
+通常, 仅仅打印出结果是没有什么意义的, 还需要把计算出的结果聚合到一个线程内, 进一步处理业务逻辑. 所以在前面Task的基础上, 还要想办法把计算结果给回调用的线程. 这可以通过再创建一个Task, 在期望的线程执行一个委托把结果传回去:
+```c++
+class FMyTask
+{
+public:
+	DECLARE_DELEGATE_ThreeParams(FOnCaculationComplete, int32 /*Begin*/, int32 /*End*/, TArray<int32> /*Result*/);
+	
+	//[InBegin, InEnd]v
+	// InThreadToAggregateResult 为InCallback执行的线程.
+	FMyTask(int32  InBegin, int32 InEnd, ENamedThreads::Type InThreadToAggregateResult, FOnCaculationComplete InCallback)
+		: Begin(InBegin), End(InEnd), ThreadToAggregateResult(InThreadToAggregateResult), Callback(InCallback)
+	{
+	}
+	~FMyTask()
+	{
+	}
+	FORCEINLINE TStatId GetStatId() const
+	{
+		RETURN_QUICK_DECLARE_CYCLE_STAT(FGenericTask, STATGROUP_TaskGraphTasks);
+	}
+	static FORCEINLINE ESubsequentsMode::Type GetSubsequentsMode() { return ESubsequentsMode::TrackSubsequents; }
 
+	ENamedThreads::Type GetDesiredThread()
+	{
+		return ENamedThreads::AnyThread;
+	}
+	void DoTask(ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent)
+	{
+		//MyCompletionGraphEvent->DontCompleteUntil(TGraphTask<FSomeChildTask>::CreateTask(NULL, CurrentThread).ConstructAndDispatchWhenReady());
+		const FString ExcThreadName =  FThreadManager::Get().GetThreadName(FPlatformTLS::GetCurrentThreadId());
+		const double BeginTime = FPlatformTime::Seconds();
+		UE_LOG(LogTemp, Display, TEXT("Begin %s in thread : %s "), TEXT(__FUNCTION__), *ExcThreadName);
+		int32 RealBegin = FMath::Max(2, Begin);
+		for (int i = RealBegin; i <= End; ++i)
+		{
+			bool isPrime = true;
+			for (int j = 2; j <= i / 2; ++j)
+			{
+				if (i % j == 0)
+				{
+					isPrime = false;
+					break;
+				}
+			}
+			if (isPrime)
+			{
+				Res.Add(i);
+			}
+		}
+		FString DebugStr = FString::Printf(TEXT("Find primer in range [%d, %d], total %d : %s"), Begin, End, Res.Num(), "[");
+		for (int i = 0; i < Res.Num()&& i < 10; ++i)
+		{
+			DebugStr += FString::FromInt(Res[i]);
+			DebugStr += ", ";
+		}
+		DebugStr += "... ...]";
+		UE_LOG(LogTemp, Display, TEXT("End %s in thread: %s ,time %f, Result : %s \n"), __FUNCTIONW__, *ExcThreadName, FPlatformTime::Seconds() - BeginTime,  * DebugStr);
+		
+		FGraphEventRef Eve = FFunctionGraphTask::CreateAndDispatchWhenReady([InBegin = Begin, InEnd = End,InResult = Res, InCallback = Callback]()
+				{
+					if (InCallback.IsBound())
+					{
+						InCallback.Execute(InBegin, InEnd, InResult);
+					}
+				}, TStatId(), nullptr, ThreadToAggregateResult);
+
+		MyCompletionGraphEvent->DontCompleteUntil(Eve);
+	}
+	TArray<int32 > Res;
+	int32 Begin;
+	int32 End;
+	ENamedThreads::Type ThreadToAggregateResult;
+	FOnCaculationComplete Callback;
+};
+```
+`FFunctionGraphTask::CreateAndDispatchWhenReady`封装了一种Task, 它在指定的Thread执行一个传入的可调用对象.`MyCompletionGraphEvent->DontCompleteUntil(Eve)` 将使得当前Task等Eve完成之后才会触发Event的完成, 也就是说只有Eve完成之后才会处理当前Task的后续任务.
+
+```c++
+auto WeakThis = MakeWeakObjectPtr(this);
+auto AggregateResultFunc = FMyTask::FOnCaculationComplete::CreateLambda([WeakThis](int32 Begin, int32 End, TArray<int32> Result)
+{
+	WeakThis->Primes.Append(Result);
+});
+
+FGraphEventRef Task1Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread)
+	.ConstructAndDispatchWhenReady(2,300000,ENamedThreads::GameThread, AggregateResultFunc);
+
+FGraphEventRef Task2Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread)
+	.ConstructAndDispatchWhenReady(300001, 480000, ENamedThreads::GameThread,AggregateResultFunc);
+
+FGraphEventRef Task3Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread)
+	.ConstructAndDispatchWhenReady(480001, 600000, ENamedThreads::GameThread,AggregateResultFunc);
+
+FGraphEventArray PrerequistesAsync = { Task1Evet ,Task2Evet,Task3Evet };
+
+FGraphEventRef Eve = FFunctionGraphTask::CreateAndDispatchWhenReady([WeakThis ]()
+	{
+		if (WeakThis.IsValid())
+		{
+			WeakThis->Primes;
+			const FString ExcThreadName = FThreadManager::Get().GetThreadName(FPlatformTLS::GetCurrentThreadId());
+
+			UE_LOG(LogTemp, Display, TEXT("Thread : %s , Get result prime : %d"), *ExcThreadName,WeakThis->Primes.Num());
+		}
+}, TStatId(), &PrerequistesAsync, ENamedThreads::GameThread);
+```
+这里我们需要查找[0,600000]之间的所有素数, 我们将其分为三个Task去完成, 每个Task寻找一个子区间内的素数, 最后将这些结果都存到GameThread的一个对象的Primes数组中.当所有Task都完成后通知GameThread所有计算都完成, 这里直接将前面三个计算任务作为计算完成的通知任务的前置Task, 这些Task完成后会触发这一通知任务.
+
+
+```c++
+[2021.11.30-01.36.09:276][ 84]LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 2 
+[2021.11.30-01.36.09:276][ 84]LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 1 
+[2021.11.30-01.36.09:276][ 84]LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 0 
+[2021.11.30-01.36.13:492][ 30]LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 1 ,time 4.214318, Result : Find primer in range [2, 300000], total 25997 : [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, ... ...] 
+
+[2021.11.30-01.36.14:782][648]LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 0 ,time 5.503952, Result : Find primer in range [480001, 600000], total 9093 : [480013, 480017, 480019, 480023, 480043, 480047, 480049, 480059, 480061, 480071, ... ...] 
+
+[2021.11.30-01.36.15:353][921]LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 2 ,time 6.075700, Result : Find primer in range [300001, 480000], total 14008 : [300007, 300017, 300023, 300043, 300073, 300089, 300109, 300119, 300137, 300149, ... ...] 
+
+[2021.11.30-01.36.15:353][921]LogTemp: Display: Thread : GameThread , Get result prime : 49098
+```
 
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
 
