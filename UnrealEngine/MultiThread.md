@@ -1,5 +1,5 @@
 ## FRunnable
-`FRunnable`是所有多线程执行的Runnable对象的基类.
+`FRunnable`是所有多线程执行的Runnable对象的基类, 它定义了按一定顺序在创建的线程中执行的接口.
 ```c++
 class CORE_API FRunnable
 {
@@ -152,7 +152,7 @@ void FThreadManager::Tick()
 	}
 }
 ```
- 其中`GuardedRun()`z最终调用`Run()`开始执行FRunnable:
+ 其中`GuardedRun()`最终调用`Run()`开始执行FRunnable:
 ```c++
 uint32 FRunnableThreadWin::Run()
 {
@@ -204,6 +204,7 @@ FFakeThread
 FForkableThread
 FRunnableThreadHoloLens
 ```
+
 所以, 这组API的使用流程大概就是:
 ```c++
 //  先继承FRunnable, 实现要多线程执行的逻辑.
@@ -294,7 +295,7 @@ void DoWork()
 }
 ```
 ### 实现
-首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程. 这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.
+首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程. 这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.这里所有的同步都是基于锁和事件的.
 ![](./image/ThreadPool.png)
 通常我们创建的Work都在一个全局线程池`GThreadPool`中执行, 它是在Engine的启动流程中创建的, 池中的线程数由当前机器的核心数和是否是Server决定.
 ```c++
@@ -453,7 +454,7 @@ void DoWork(IQueuedWork* InQueuedWork)
 ```
 
 ### IQueuedWork
-在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.
+`IQueuedWork`只管任务的入口, 在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外Engine中也有很多特殊的Work.
 
 ## TaskGraph
 相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 在不同线程执行的任务之间可以有先后顺序的依赖, 指定前序任务和后序任务.
@@ -1074,7 +1075,7 @@ private:
 	FGraphEventRef				Subsequents;
 };
 ```
-### 使用
+### 实例
 假如我们需要得到很多素数,希望能够多线程快速计算出来,首先需要实现一个TTask:
 ```c++
 class FMyTask
@@ -1127,7 +1128,7 @@ public:
 			DebugStr += FString::FromInt(Res[i]);
 			DebugStr += ", ";
 		}
-		DebugStr += "]";
+		DebugStr += "... ...]";
 		UE_LOG(LogTemp, Display, TEXT("End %s in thread: %s ,time %f, Result : %s \n"), __FUNCTIONW__, *ExcThreadName, FPlatformTime::Seconds() - BeginTime,  * DebugStr);
 	    //https://answers.unrealengine.com/questions/347305/is-ue-log-thread-safe.html?sort=oldest
 	}
@@ -1236,7 +1237,10 @@ public:
 	//[InBegin, InEnd]v
 	// InThreadToAggregateResult 为InCallback执行的线程.
 	FMyTask(int32  InBegin, int32 InEnd, ENamedThreads::Type InThreadToAggregateResult, FOnCaculationComplete InCallback)
-		: Begin(InBegin), End(InEnd), ThreadToAggregateResult(InThreadToAggregateResult), Callback(InCallback)
+		: Begin(InBegin)
+		, End(InEnd)
+		, ThreadToAggregateResult(InThreadToAggregateResult)
+		, Callback(InCallback)
 	{
 	}
 	~FMyTask()
@@ -1304,12 +1308,15 @@ public:
 `FFunctionGraphTask::CreateAndDispatchWhenReady`封装了一种Task, 它在指定的Thread执行一个传入的可调用对象.`MyCompletionGraphEvent->DontCompleteUntil(Eve)` 将使得当前Task等Eve完成之后才会触发Event的完成, 也就是说只有Eve完成之后才会处理当前Task的后续任务.
 
 ```c++
+// GameThread  创建计算任务并接收计算结果的地方.
 auto WeakThis = MakeWeakObjectPtr(this);
+// 接收结果的回调, 在GameThread执行, 将每次计算的结果保存在一个数组中.
 auto AggregateResultFunc = FMyTask::FOnCaculationComplete::CreateLambda([WeakThis](int32 Begin, int32 End, TArray<int32> Result)
 {
 	WeakThis->Primes.Append(Result);
 });
 
+// 下面三个任务寻找三个区间内的素数, 并指明在GameThread调用保存结果的回调.
 FGraphEventRef Task1Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread)
 	.ConstructAndDispatchWhenReady(2,300000,ENamedThreads::GameThread, AggregateResultFunc);
 
@@ -1320,7 +1327,7 @@ FGraphEventRef Task3Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThread
 	.ConstructAndDispatchWhenReady(480001, 600000, ENamedThreads::GameThread,AggregateResultFunc);
 
 FGraphEventArray PrerequistesAsync = { Task1Evet ,Task2Evet,Task3Evet };
-
+// 将这三个任务作为前置任务, 通知GameThread所有计算已经完成.
 FGraphEventRef Eve = FFunctionGraphTask::CreateAndDispatchWhenReady([WeakThis ]()
 	{
 		if (WeakThis.IsValid())
@@ -1336,16 +1343,17 @@ FGraphEventRef Eve = FFunctionGraphTask::CreateAndDispatchWhenReady([WeakThis ](
 
 
 ```c++
-[2021.11.30-01.36.09:276][ 84]LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 2 
-[2021.11.30-01.36.09:276][ 84]LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 1 
-[2021.11.30-01.36.09:276][ 84]LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 0 
-[2021.11.30-01.36.13:492][ 30]LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 1 ,time 4.214318, Result : Find primer in range [2, 300000], total 25997 : [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, ... ...] 
+LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 2 
+LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 1 
+LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 0 
 
-[2021.11.30-01.36.14:782][648]LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 0 ,time 5.503952, Result : Find primer in range [480001, 600000], total 9093 : [480013, 480017, 480019, 480023, 480043, 480047, 480049, 480059, 480061, 480071, ... ...] 
+LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 1 ,time 4.214318, Result : Find primer in range [2, 300000], total 25997 : [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, ... ...] 
 
-[2021.11.30-01.36.15:353][921]LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 2 ,time 6.075700, Result : Find primer in range [300001, 480000], total 14008 : [300007, 300017, 300023, 300043, 300073, 300089, 300109, 300119, 300137, 300149, ... ...] 
+LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 0 ,time 5.503952, Result : Find primer in range [480001, 600000], total 9093 : [480013, 480017, 480019, 480023, 480043, 480047, 480049, 480059, 480061, 480071, ... ...] 
 
-[2021.11.30-01.36.15:353][921]LogTemp: Display: Thread : GameThread , Get result prime : 49098
+LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 2 ,time 6.075700, Result : Find primer in range [300001, 480000], total 14008 : [300007, 300017, 300023, 300043, 300073, 300089, 300109, 300119, 300137, 300149, ... ...] 
+
+LogTemp: Display: Thread : GameThread , Get result prime : 49098
 ```
 
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
