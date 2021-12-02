@@ -375,7 +375,7 @@ FQueuedThread::Run()
 }
 ```
 创建好的`FQueuedThread`只存在两种状态, 要么被放在QueuedThread队列中, 处于空闲状态. 要么处于忙碌状态, 不停地从任务队列中取出任务来执行.
-
+![QueuedThreadStateTransform](./image/QueuedThreadStateTransfrom.png)
 `ReturnToPoolOrGetNextJob(this)`会尝试从任务队列中拿出一个Work继续执行, 如果没有, 则把传入的Thread加入到空闲线程队列中, 并进入休眠状态, 直到下一次调用`DoWork()`通过事件唤醒.
 
 ```c++
@@ -438,7 +438,7 @@ void AddQueuedWork(IQueuedWork* InQueuedWork) override
 	Thread->DoWork(InQueuedWork);
 }
 ```
-由于空闲线程队列中的线程都处于休眠状态`(DoWorkEvent->Wait())`, `DoWorkEvent->Trigger()`会唤醒当前thread, Work线程主循环和DoWork()对`QueuedWork`的读写都没有加锁, 这是在逻辑上保证了它们不会冲突. 为确保在多处理器情况下的写入同步, 每次对`QueuedWork`的更改后都需要调用`FPlatformMisc::MemoryBarrier()`, 以确保当前写入对其它处理器可见.
+由于空闲线程队列中的线程都处于休眠状态`(DoWorkEvent->Wait())`, `DoWorkEvent->Trigger()`会使`DoWorkEvent->Wait()`返回, Worker线程主循环和DoWork()对`QueuedWork`的读写都没有加锁, 这是在逻辑上保证了它们不会冲突. 为确保在多处理器情况下的写入同步, 每次对`QueuedWork`的更改后都需要调用`FPlatformMisc::MemoryBarrier()`, 以确保当前写入对其它处理器可见.
 ```c++
 void DoWork(IQueuedWork* InQueuedWork)
 {
@@ -455,13 +455,13 @@ void DoWork(IQueuedWork* InQueuedWork)
 
 ### IQueuedWork
 `IQueuedWork`只管任务的入口, 在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外Engine中也有很多特殊的Work.
-
+![IQueuedWork](./image/IQueuedWork.png)
 ## TaskGraph
 相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 在不同线程执行的任务之间可以有先后顺序的依赖, 指定前序任务和后序任务.
 
 ### FTaskGraphInterface和FTaskGraphImplementation
 
-`FTaskGraphInterface`定义了向外部提供的一组功能API, 真正的实现在`FTaskGraphImplementation`. 它的基本功能包括了`FQueuedThreadPool`, 创建一系列的线程, 将Task放入任务队列,这些线程循环从队列中取出任务执行, 这些线程都是一些通用的, 没有特殊目的的线程. 除此之外, Engine中还存在着一些专用的线程, 比如GameThread用于处理游戏逻辑, RenderingThread处理渲染相关逻辑, AudioThread处理音频相关的事物, UE4中有5个这样的线程:
+`FTaskGraphInterface`定义了向外部提供的一组功能API, 真正的实现在`FTaskGraphImplementation`. 它的基本功能包括了`FQueuedThreadPool`, 创建一系列的线程, 将Task放入任务队列,这些线程循环从队列中取出任务执行, 这些线程都是一些通用的, 没有特殊目的的线程, 但是在实现方面,`FQueuedThreadPool`中的队列同步都是基于锁的实现, 而`FTaskGraphImplementation`则是基于无锁无等待的实现.  除此之外, 还将Engine中存在着一些专用的线程也纳入管理范围, 比如GameThread用于处理游戏逻辑, RenderingThread处理渲染相关逻辑, AudioThread处理音频相关的事物, UE4中有5个这样的线程:
 ```c++
 StatsThread, // 搜集性能统计相关的数据
 RHIThread,   // 执行RenderHardware命令
@@ -537,6 +537,7 @@ namespace ENamedThreads
 }
 ```
 ![sad](./taskgraph_type.png)
+
 这里, 
 * 低八位表示NamedThread 
 * 第九位表示NamedThread的Task队列索引, 也就是说每个NamedTread有两个队列MainQueue和LocalQueue.
@@ -746,7 +747,7 @@ struct FWorkerThread
 
 ![threadNum](./taskgraph_threadNum.png)
 
-三种优先级的AnyThread使用不同的Tread优先级任务队列`IncomingAnyThreadTasks[2]`, 由`FTaskGraphImplementation`持有, 没有显式指定优先级的Task就是`NormalThreadPriority`. 每一种Thread优先级都有两个队列, 表示Task的优先级,这些队列都是无锁实现. 这些Thread会根据自己的优先级到相应的队列中取出Task执行.
+三种优先级的AnyThread使用不同的Tread优先级任务队列`IncomingAnyThreadTasks[3]`, 由`FTaskGraphImplementation`持有, 没有显式指定优先级的Task就是`NormalThreadPriority`. 每一种Thread优先级都有两个队列, 表示Task的优先级,这些队列都是无锁实现. 这些Thread会根据自己的优先级到相应的队列中取出Task执行.
 
 而`NamedThread`不会创建`FRunnableThread`, 它们真正执行`Task`的`Thread`由对应的模块创建, 并自己调用`FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread)`和对应的`Worker`相关联.在`NamedThread`的`FNamedTaskThread`的实现中, 持有两个任务队列, 所有期望`NamedThread`执行的`Task`都会入队到各自的队列中, 真正的`NamedThread`在恰当的时候调用`FTaskGraphInterface`的接口执行自己队列中的任务.
 
@@ -781,7 +782,7 @@ void AudioThreadMain( FEvent* TaskGraphBoundSyncEvent )
 }
 ```
 这里`ProcessThreadUntilRequestReturn`会进入AudioThread的`TaskGraphWorker`中循环执行AudioThread的Task.
-
+![](./image/TaskGraphinterface.png)
 ### FBaseGraphTask
 `FBaseGraphTask`向`FTaskGraphInterface`提供具体Task执行的入口`Execute`, 处理与FTaskGraphInterface的耦合.还有前置依赖Task的计数, 用于确定何时将Task放入TaskGraph队列中.而具体依赖关系的实现并不是在这处理,而是给唯一子类`TGraphTask<TTask>`, 还有`Execute`的实现, 这也与`FGraphEvent`相关.
 
