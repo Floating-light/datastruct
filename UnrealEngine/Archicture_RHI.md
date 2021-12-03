@@ -1,3 +1,4 @@
+`ENQUEUE_RENDER_COMMAND(Type)`展开如下:
 ```c++
 #define ENQUEUE_RENDER_COMMAND(Type) \
 struct Type##Name \
@@ -6,9 +7,21 @@ struct Type##Name \
 	static const TCHAR* TStr() { return TEXT(#Type); } \
 }; \
 EnqueueUniqueRenderCommand<Type##Name>
+```
+宏参数`Type`只是为了性能统计, 标识命令类型. 关键在于对函数`EnqueueUniqueRenderCommand<Type##Name>()`的调用. 在开始一个场景的渲染时调用:
+```c++
+ENQUEUE_RENDER_COMMAND(FDrawSceneCommand)(
+	[SceneRenderer, DrawSceneEnqueue](FRHICommandListImmediate& RHICmdList)
+	{
+		const float StartDelayMillisec = FPlatformTime::ToMilliseconds(FPlatformTime::Cycles() - DrawSceneEnqueue);
+		CSV_CUSTOM_STAT_GLOBAL(DrawSceneCommand_StartDelay, StartDelayMillisec, ECsvCustomStatOp::Set);
 
-// 一个函数调用
-ENQUEUE_RENDER_COMMAND(FDrawSceneCommand) --->>> 展开为:
+		RenderViewFamily_RenderThread(RHICmdList, SceneRenderer);
+		FlushPendingDeleteRHIResources_RenderThread();
+	});
+```
+最终展开为:
+```c++
 // 性能统计用
 struct FDrawSceneCommandName 
 {  
@@ -31,7 +44,7 @@ template<typename TSTR, typename LAMBDA>
 FORCEINLINE_DEBUGGABLE void EnqueueUniqueRenderCommand(LAMBDA&& Lambda)
 {
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_EnqueueUniqueRenderCommand);
-    // DoTask实现, 期望在RenderThread执行, 不支持被依赖
+    // TTask::DoTask实现, 期望在RenderThread执行, 不支持被依赖
 	typedef TEnqueueUniqueRenderCommandType<TSTR, LAMBDA> EURCType;
     // 在渲染线程Enqueue则直接执行.
 	if (IsInRenderingThread())

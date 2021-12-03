@@ -798,6 +798,7 @@ protected:
 	}
 
 	// 完成前置条件的配置, 在这之后, 只要 NumberOfPrerequistitesOutstanding为0,就可以执行.
+	// 子类TGraphTask<TTask>调用
 	void PrerequisitesComplete(ENamedThreads::Type CurrentThread, int32 NumAlreadyFinishedPrequistes, bool bUnlock = true)
 	{
 		checkThreadGraph(LifeStage.Increment() == int32(LS_PrequisitesSetup));
@@ -808,7 +809,7 @@ protected:
 		}
 	}
 
-	// 每当有一个前置任务完成时, this 作为其后置任务, 会在这个完成的GraphEvent中调用所有后置任务的这个函数.
+	// 每当有一个前置任务完成时, this 作为其后置任务, 会在这个完成的FGraphEvent中调用所有后置任务的这个函数.
 	// 直到计数器减为0, 表明所有前置任务执行完毕, 这个任务可以开始执行.
 	void ConditionalQueueTask(ENamedThreads::Type CurrentThread)
 	{
@@ -818,12 +819,10 @@ protected:
 		}
 	}
 private:
-	// Subclass API
-
-	// 子类实现执行Task逻辑的地方
+	// 子类TGraphTask<TTask>实现执行Task逻辑的地方
 	virtual void ExecuteTask(TArray<FBaseGraphTask*>& NewTasks, ENamedThreads::Type CurrentThread)=0;
 
-	// 在所要求的线程Worker中调用, 执行Task
+	// 在ThreadToExecuteOn线程中调用, 执行Task
 	FORCEINLINE void Execute(TArray<FBaseGraphTask*>& NewTasks, ENamedThreads::Type CurrentThread)
 	{
 		LLM_SCOPE(InheritedLLMTag);
@@ -854,14 +853,14 @@ class FGraphEvent
 {
 public:
 	// 添加一个任务作为后续任务, 如果此事件已经Fired, 将返回false, 表明此事件无法作为前置事件.
-	// 通常一个被依赖的事件会作为参数, 其后序Task构造时传入, 调用PrerequisiteEvent->AddSubsequent(this)
+	// 通常所有被依赖的事件会作为参数, 在Task构造时传入, 对所有依赖的Event调用PrerequisiteEvent->AddSubsequent(this)
 	bool AddSubsequent(class FBaseGraphTask* Task)
 	{
 		return SubsequentList.PushIfNotClosed(Task);
 	}
 
 	// 给定一个事件作为当前事件完成的条件之一.
-	// 仅在执行关联的Task期间有效.也就是说一个Task在执行时可以添加自己的子Task, 且仅当子Task完成时自己才算完成.
+	// 仅在执行关联的Task(TTask->DoTask())期间有效.也就是说一个Task在执行时可以添加自己的子Task, 且仅当子Task完成时自己才算完成.
 	void DontCompleteUntil(FGraphEventRef EventToWaitFor)
 	{
 		checkThreadGraph(!IsComplete()); 
@@ -1076,6 +1075,7 @@ private:
 	FGraphEventRef				Subsequents;
 };
 ```
+![family](./image/TaskGraph_family.png)
 ### 实例
 假如我们需要得到很多素数,希望能够多线程快速计算出来,首先需要实现一个TTask:
 ```c++
@@ -1308,6 +1308,14 @@ public:
 ```
 `FFunctionGraphTask::CreateAndDispatchWhenReady`封装了一种Task, 它在指定的Thread执行一个传入的可调用对象.`MyCompletionGraphEvent->DontCompleteUntil(Eve)` 将使得当前Task等Eve完成之后才会触发Event的完成, 也就是说只有Eve完成之后才会处理当前Task的后续任务.
 
+
+class FGenericTask
+{
+	FORCEINLINE TStatId GetStatId() const;
+	[static] ENamedThreads::Type GetDesiredThread();
+	void DoTask(ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent);
+};
+
 ```c++
 // GameThread  创建计算任务并接收计算结果的地方.
 auto WeakThis = MakeWeakObjectPtr(this);
@@ -1357,6 +1365,147 @@ LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 2 ,time 6.075
 LogTemp: Display: Thread : GameThread , Get result prime : 49098
 ```
 
+## 多线程渲染
+UE4 的渲染由三个线程(GameThread, RenderThread, RHIThread)配合完成, 都是NamedThread, 受`FTaskGraphInterface`管理.工作流程是GameThread向RenderThread的Task队列中添加各种渲染Task, RenderThread不断地从中取出执行, 并生成平台无关的CommandList, 而RHI线程负责调用具体的图形API执行这些Command。  
+
+### 渲染线程
+渲染线程在引擎初始化时调用渲染模块(RenderCore)的`StartRenderingThread()`创建:
+```c++
+GRenderingThreadRunnable = new FRenderingThread();
+
+GRenderingThread = 
+FRunnableThread::Create(GRenderingThreadRunnable, "RenderThread0", 0, FPlatformAffinity::GetRenderingThreadPriority(), FPlatformAffinity::GetRenderingThreadMask(), FPlatformAffinity::GetRenderingThreadFlags());
+```
+而`FRenderingThread`中开始了RenderThread的主循环:
+```c++
+FRenderingThread::Run()
+	RenderingThreadMain( TaskGraphBoundSyncEvent );
+
+// void RenderingThreadMain( FEvent* TaskGraphBoundSyncEvent )
+	ENamedThreads::Type RenderThread = ENamedThreads::Type(ENamedThreads::ActualRenderingThread);
+
+	ENamedThreads::SetRenderThread(RenderThread);
+	ENamedThreads::SetRenderThread_Local(ENamedThreads::Type(ENamedThreads::ActualRenderingThread_Local));
+
+	FTaskGraphInterface::Get().AttachToThread(RenderThread);
+	FPlatformMisc::MemoryBarrier();
+
+	FCoreDelegates::PostRenderingThreadCreated.Broadcast();
+	check(GIsThreadedRendering);
+	FTaskGraphInterface::Get().ProcessThreadUntilRequestReturn(RenderThread);
+	FCoreDelegates::PreRenderingThreadDestroyed.Broadcast();
+```
+其它的线程就可以用TaskGraph的接口向RenderThread中添加渲染任务, 但是通常不直接这样做, 而是通过宏`ENQUEUE_RENDER_COMMAND(Type)`.它展开如下:
+```c++
+#define ENQUEUE_RENDER_COMMAND(Type) \
+struct Type##Name \
+{  \
+	static const char* CStr() { return #Type; } \
+	static const TCHAR* TStr() { return TEXT(#Type); } \
+}; \
+EnqueueUniqueRenderCommand<Type##Name>
+```
+宏参数`Type`只是为了性能统计, 标识命令类型. 关键在于对函数`EnqueueUniqueRenderCommand<Type##Name>()`的调用. 例如在开始一个场景的渲染时调用:
+```c++
+ENQUEUE_RENDER_COMMAND(FDrawSceneCommand)(
+	[SceneRenderer, DrawSceneEnqueue](FRHICommandListImmediate& RHICmdList)
+	{
+		const float StartDelayMillisec = FPlatformTime::ToMilliseconds(FPlatformTime::Cycles() - DrawSceneEnqueue);
+		CSV_CUSTOM_STAT_GLOBAL(DrawSceneCommand_StartDelay, StartDelayMillisec, ECsvCustomStatOp::Set);
+
+		RenderViewFamily_RenderThread(RHICmdList, SceneRenderer);
+		FlushPendingDeleteRHIResources_RenderThread();
+	});
+```
+最终展开为:
+```c++
+// 性能统计用
+struct FDrawSceneCommandName 
+{  
+	static const char* CStr() { return "FDrawSceneCommand"; } 
+	static const TCHAR* TStr() { return TEXT("FDrawSceneCommand"); } 
+}; 
+EnqueueUniqueRenderCommand<FDrawSceneCommandName>(
+			[SceneRenderer, DrawSceneEnqueue](FRHICommandListImmediate& RHICmdList)
+			{
+				const float StartDelayMillisec = FPlatformTime::ToMilliseconds(FPlatformTime::Cycles() - DrawSceneEnqueue);
+				CSV_CUSTOM_STAT_GLOBAL(DrawSceneCommand_StartDelay, StartDelayMillisec, ECsvCustomStatOp::Set);
+
+				RenderViewFamily_RenderThread(RHICmdList, SceneRenderer);
+				FlushPendingDeleteRHIResources_RenderThread();
+			});
+```
+其中`EnqueueUniqueRenderCommand`:
+```c++
+template<typename TSTR, typename LAMBDA>
+FORCEINLINE_DEBUGGABLE void EnqueueUniqueRenderCommand(LAMBDA&& Lambda)
+{
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_EnqueueUniqueRenderCommand);
+    // TTask::DoTask实现, 期望在RenderThread执行, 不支持被依赖
+	typedef TEnqueueUniqueRenderCommandType<TSTR, LAMBDA> EURCType;
+    // 在渲染线程Enqueue则直接执行.
+	if (IsInRenderingThread())
+	{
+		FRHICommandListImmediate& RHICmdList = GetImmediateCommandList_ForRenderCommand();
+		Lambda(RHICmdList);
+	}
+	else
+	{
+        // 如果是多线程渲染则应该在Render线程执行
+        // 则创建一个Task.
+		if (ShouldExecuteOnRenderThread()) // GIsThreadedRendering || !IsInGameThread()
+		{
+			CheckNotBlockedOnRenderThread();
+            // 创建Task, 放到指定线程的Task队列中等待执行
+			TGraphTask<EURCType>::CreateTask().ConstructAndDispatchWhenReady(Forward<LAMBDA>(Lambda));
+		}
+		else // 立即执行, 跳过Task创建.
+		{
+			EURCType TempCommand(Forward<LAMBDA>(Lambda));
+			FScopeCycleCounter EURCMacro_Scope(TempCommand.GetStatId());
+			TempCommand.DoTask(ENamedThreads::GameThread, FGraphEventRef());
+		}
+	}
+}
+```
+这里处理了各种执行情况, 单线程, 多线程, 根据当前线程跳过TaskGraph的流程等等.但不论哪一种情况, 执行方式都是一样的:
+```c++
+FRHICommandListImmediate& RHICmdList = GetImmediateCommandList_ForRenderCommand();
+Lambda(RHICmdList);
+```
+
+### RHI线程
+在`StartRenderingThread()`中创建RenderThread之前会创建`RHI`线程:
+```c++
+// FRHIThread::Get().Start();
+void FRHIThread::Start()
+{
+	Trace::ThreadGroupBegin(TEXT("Render"));
+	Thread = FRunnableThread::Create(this, TEXT("RHIThread"), 512 * 1024, FPlatformAffinity::GetRHIThreadPriority(),
+		FPlatformAffinity::GetRHIThreadMask(), FPlatformAffinity::GetRHIThreadFlags()
+		);
+	check(Thread);
+	Trace::ThreadGroupEnd();
+}
+
+virtual uint32 FRHIThread::Run() override
+{
+	LLM_SCOPE(ELLMTag::RHIMisc);
+
+	FMemory::SetupTLSCachesOnCurrentThread();
+	FTaskGraphInterface::Get().AttachToThread(ENamedThreads::RHIThread);
+	FTaskGraphInterface::Get().ProcessThreadUntilRequestReturn(ENamedThreads::RHIThread);
+	FMemory::ClearAndDisableTLSCachesOnCurrentThread();
+	return 0;
+}
+```
+这就很简单了.
+```c++
+FExecuteRHIThreadTask
+FRHICommandListExecutor::ExecuteInner_DoExecute(*RHICmdList);
+
+//FDispatchRHIThreadTask
+```
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
 
 * https://zhuanlan.zhihu.com/p/38881269
