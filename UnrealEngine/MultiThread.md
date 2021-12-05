@@ -1428,9 +1428,6 @@ struct FDrawSceneCommandName
 EnqueueUniqueRenderCommand<FDrawSceneCommandName>(
 			[SceneRenderer, DrawSceneEnqueue](FRHICommandListImmediate& RHICmdList)
 			{
-				const float StartDelayMillisec = FPlatformTime::ToMilliseconds(FPlatformTime::Cycles() - DrawSceneEnqueue);
-				CSV_CUSTOM_STAT_GLOBAL(DrawSceneCommand_StartDelay, StartDelayMillisec, ECsvCustomStatOp::Set);
-
 				RenderViewFamily_RenderThread(RHICmdList, SceneRenderer);
 				FlushPendingDeleteRHIResources_RenderThread();
 			});
@@ -1499,12 +1496,179 @@ virtual uint32 FRHIThread::Run() override
 	return 0;
 }
 ```
-这就很简单了.
-```c++
-FExecuteRHIThreadTask
-FRHICommandListExecutor::ExecuteInner_DoExecute(*RHICmdList);
 
-//FDispatchRHIThreadTask
+在使用`ENQUEUE_RENDER_COMMAND(Type)`给RenderThread执行的Lambda中必定会接受一个参数`FRHICommandListImmediate& RHICmdList`, 这个参数一般是在执行RenderThread的Task时, 从RHI模块的一个全局变量传过来的, 在RenderThread中就会通过它发送渲染指令.
+
+TODO: Graphic 
+
+但是这并不会立即给`RHI Thread`执行, 例如:
+```c++
+void FRHICommandList::DrawPrimitive(uint32 BaseVertexIndex, uint32 NumPrimitives, uint32 NumInstances)
+{
+	//check(IsOutsideRenderPass());
+	if (Bypass())
+	{
+		GetContext().RHIDrawPrimitive(BaseVertexIndex, NumPrimitives, NumInstances);
+		return;
+	}
+	ALLOC_COMMAND(FRHICommandDrawPrimitive)(BaseVertexIndex, NumPrimitives, NumInstances);
+}
+```
+而`ALLOC_COMMAND`展开为: 
+```c++
+#define ALLOC_COMMAND(...) new ( AllocCommand(sizeof(__VA_ARGS__), alignof(__VA_ARGS__)) ) __VA_ARGS__
+
+ALLOC_COMMAND(FRHICommandDrawPrimitive)(BaseVertexIndex, NumPrimitives, NumInstances);
+// 展开为:
+new ( AllocCommand(sizeof(FRHICommandDrawPrimitive), alignof(FRHICommandDrawPrimitive)) ) FRHICommandDrawPrimitive(BaseVertexIndex, NumPrimitives, NumInstances);
+```
+
+而`AllocCommand`则是开辟了一块`FRHICommandDrawPrimitive`大小的内存, 并将其添加到Command链表中, 这个链表保存了当前添加的所有命令.
+```c++
+FORCEINLINE_DEBUGGABLE void* AllocCommand(int32 AllocSize, int32 Alignment)
+{
+	checkSlow(!IsExecuting());
+	FRHICommandBase* Result = (FRHICommandBase*) MemManager.Alloc(AllocSize, Alignment);
+	++NumCommands;
+	*CommandLink = Result;
+	CommandLink = &Result->Next;
+	return Result;
+}
+```
+随后在这块内存上用`FRHICommandDrawPrimitive`的构造函数初始化, 而它定义为:
+```c++
+FRHICOMMAND_MACRO(FRHICommandDrawPrimitive)
+{
+	uint32 BaseVertexIndex;
+	uint32 NumPrimitives;
+	uint32 NumInstances;
+	FORCEINLINE_DEBUGGABLE FRHICommandDrawPrimitive(uint32 InBaseVertexIndex, uint32 InNumPrimitives, uint32 InNumInstances)
+		: BaseVertexIndex(InBaseVertexIndex)
+		, NumPrimitives(InNumPrimitives)
+		, NumInstances(InNumInstances)
+	{
+	}
+	RHI_API void Execute(FRHICommandListBase& CmdList);
+};
+// 上面的宏可以展开为
+struct FRHICommandDrawPrimitiveString1001				
+{																	
+	static const TCHAR* TStr() { return TEXT("FRHICommandDrawPrimitive"); }		
+};																	
+struct FRHICommandDrawPrimitive final : public FRHICommand<FRHICommandDrawPrimitive, FRHICommandDrawPrimitiveString1001>
+{
+	uint32 BaseVertexIndex;
+	uint32 NumPrimitives;
+	uint32 NumInstances;
+	FORCEINLINE_DEBUGGABLE FRHICommandDrawPrimitive(uint32 InBaseVertexIndex, uint32 InNumPrimitives, uint32 InNumInstances)
+		: BaseVertexIndex(InBaseVertexIndex)
+		, NumPrimitives(InNumPrimitives)
+		, NumInstances(InNumInstances)
+	{
+	}
+	// 最终调用RHI模块封装的图形API
+	RHI_API void Execute(FRHICommandListBase& CmdList);
+};
+```
+
+```c++
+// 链表节点
+struct FRHICommandBase
+{
+	FRHICommandBase* Next = nullptr;
+	virtual void ExecuteAndDestruct(FRHICommandListBase& CmdList, FRHICommandListDebugContext& DebugContext) = 0;
+};
+
+// TCmd 实现的命令本身, 调用其Execute函数, 完了立即调用其析构函数.
+// NameType用于性能数据统计
+template<typename TCmd, typename NameType = FUnnamedRhiCommand>
+struct FRHICommand : public FRHICommandBase
+{
+#if RHICOMMAND_CALLSTACK
+	uint64 StackFrames[16];
+
+	FRHICommand()
+	{
+		FPlatformStackWalk::CaptureStackBackTrace(StackFrames, 16);
+	}
+#endif
+
+	void ExecuteAndDestruct(FRHICommandListBase& CmdList, FRHICommandListDebugContext& Context) override final
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE_ON_CHANNEL_STR(NameType::TStr(), RHICommandsChannel);
+		
+		TCmd *ThisCmd = static_cast<TCmd*>(this);
+#if RHI_COMMAND_LIST_DEBUG_TRACES
+		ThisCmd->StoreDebugInfo(Context);
+#endif
+		ThisCmd->Execute(CmdList);
+		ThisCmd->~TCmd();
+	}
+
+	virtual void StoreDebugInfo(FRHICommandListDebugContext& Context) {};
+};
+```
+由此可见, 所有的RHI命令都是事先实现好的:
+```c++
+FRHICOMMAND_MACRO(FRHICommandSetViewport)
+FRHICOMMAND_MACRO(FRHICommandSetStereoViewport)
+FRHICOMMAND_MACRO(FRHICommandSetScissorRect)
+FRHICOMMAND_MACRO(FRHICommandSetRenderTargets)
+FRHICOMMAND_MACRO(FRHICommandBeginRenderPass)
+FRHICOMMAND_MACRO(FRHICommandEndRenderPass)
+FRHICOMMAND_MACRO(FRHICommandNextSubpass)
+FRHICOMMAND_MACRO(FRHICommandBeginParallelRenderPass)
+FRHICOMMAND_MACRO(FRHICommandEndParallelRenderPass)
+FRHICOMMAND_MACRO(FRHICommandBeginRenderSubPass)
+FRHICOMMAND_MACRO(FRHICommandEndRenderSubPass)
+FRHICOMMAND_MACRO(FRHICommandBeginComputePass)
+FRHICOMMAND_MACRO(FRHICommandEndComputePass)
+FRHICOMMAND_MACRO(FRHICommandBindClearMRTValues)
+FRHICOMMAND_MACRO(FRHICommandSetGraphicsPipelineState)
+FRHICOMMAND_MACRO(FRHICommandAutomaticCacheFlushAfterComputeShader)
+FRHICOMMAND_MACRO(FRHICommandFlushComputeShaderCache)
+FRHICOMMAND_MACRO(FRHICommandDrawPrimitiveIndirect)
+FRHICOMMAND_MACRO(FRHICommandDrawIndexedIndirect)
+FRHICOMMAND_MACRO(FRHICommandDrawIndexedPrimitiveIndirect)
+FRHICOMMAND_MACRO(FRHICommandSetDepthBounds)
+FRHICOMMAND_MACRO(FRHICommandClearUAVFloat)
+FRHICOMMAND_MACRO(FRHICommandClearUAVUint)
+FRHICOMMAND_MACRO(FRHICommandCopyToResolveTarget)
+FRHICOMMAND_MACRO(FRHICommandCopyTexture)
+FRHICOMMAND_MACRO(FRHICommandResummarizeHTile)
+FRHICOMMAND_MACRO(FRHICommandTransitionTexturesDepth)
+FRHICOMMAND_MACRO(FRHICommandTransitionTextures)
+FRHICOMMAND_MACRO(FRHICommandTransitionTexturesArray)
+FRHICOMMAND_MACRO(FRHICommandTransitionTexturesPipeline)
+FRHICOMMAND_MACRO(FRHICommandTransitionTexturesArrayPipeline)
+FRHICOMMAND_MACRO(FRHICommandClearColorTexture)
+FRHICOMMAND_MACRO(FRHICommandClearDepthStencilTexture)
+FRHICOMMAND_MACRO(FRHICommandClearColorTextures)
+FRHICOMMAND_MACRO(FRHICommandSetGlobalUniformBuffers)
+FRHICOMMAND_MACRO(FRHICommandBuildLocalUniformBuffer)
+FRHICOMMAND_MACRO(FRHICommandBeginRenderQuery)
+FRHICOMMAND_MACRO(FRHICommandEndRenderQuery)
+FRHICOMMAND_MACRO(FRHICommandCalibrateTimers)
+FRHICOMMAND_MACRO(FRHICommandPollOcclusionQueries)
+FRHICOMMAND_MACRO(FRHICommandBeginScene)
+FRHICOMMAND_MACRO(FRHICommandEndScene)
+FRHICOMMAND_MACRO(FRHICommandBeginFrame)
+FRHICOMMAND_MACRO(FRHICommandEndFrame)
+FRHICOMMAND_MACRO(FRHICommandBeginDrawingViewport)
+FRHICOMMAND_MACRO(FRHICommandEndDrawingViewport)
+FRHICOMMAND_MACRO(FRHICommandInvalidateCachedState)
+FRHICOMMAND_MACRO(FRHICommandDiscardRenderTargets)
+FRHICOMMAND_MACRO(FRHICommandDebugBreak)
+```
+RenderThread通过CmdList添加各种命令到RHI命令列表中,这些命令用一个链表前后串联起来, 最后在恰当的时候创建Task, 将整个CmdList拷贝一份到RHI线程执行:
+```c++
+void FRHICommandListImmediate::ImmediateFlush(EImmediateFlushType::Type FlushType)
+void FRHICommandListExecutor::ExecuteList(FRHICommandListBase& CmdList)
+void FRHICommandListExecutor::ExecuteInner(FRHICommandListBase& CmdList)
+
+RHIThreadTask = TGraphTask<FExecuteRHIThreadTask>::CreateTask(&Prereq, ENamedThreads::GetRenderThread()).ConstructAndDispatchWhenReady(SwapCmdList);
+
+```
 ```
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
 
