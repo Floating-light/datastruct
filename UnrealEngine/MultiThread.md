@@ -24,7 +24,7 @@ FAsyncPurge
 FRunnable仅仅是定义了期望多线程执行的逻辑, 它需要有真正的线程`(FRunnableThread)`执行它. 上面那些`FRunnable`对象的子类`FRenderingThread`或`FRHIThread`,名字听起来像线程对象, 但他并不是.
 
 ## FRunnableThread
-这才是线程本体.它提供了一些管理线程对象本身生命周期的接口. FRunnableThread在创建时, 接收一个FRunnable对象实例, 用平台相关的接口创建出真正的线程, 并执行真线程的入口函数, 函数中会执行传入的FRunnable.
+这才是线程本体.它提供了一些管理线程对象本身生命周期的接口. FRunnableThread在创建时, 接收一个FRunnable对象实例, 用平台相关的接口创建出真正的线程, 并执行真线程的入口函数, 其中会执行传入的FRunnable.
 ```c++
 class CORE_API FRunnableThread
 {
@@ -296,7 +296,9 @@ void DoWork()
 ```
 ### 实现
 首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程. 这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.这里所有的同步都是基于锁和事件的.
+
 ![](./image/ThreadPool.png)
+
 通常我们创建的Work都在一个全局线程池`GThreadPool`中执行, 它是在Engine的启动流程中创建的, 池中的线程数由当前机器的核心数和是否是Server决定.
 ```c++
 // int32 FEngineLoop::PreInitPreStartupScreen(const TCHAR* CmdLine)
@@ -454,7 +456,7 @@ void DoWork(IQueuedWork* InQueuedWork)
 ```
 
 ### IQueuedWork
-`IQueuedWork`只管任务的入口, 在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外Engine中也有很多特殊的Work.
+`IQueuedWork`是一个抽象接口, 在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外Engine中也有很多特殊的Work.
 ![IQueuedWork](./image/IQueuedWork.png)
 ## TaskGraph
 相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 在不同线程执行的任务之间可以有先后顺序的依赖, 指定前序任务和后序任务.
@@ -1523,7 +1525,7 @@ ALLOC_COMMAND(FRHICommandDrawPrimitive)(BaseVertexIndex, NumPrimitives, NumInsta
 new ( AllocCommand(sizeof(FRHICommandDrawPrimitive), alignof(FRHICommandDrawPrimitive)) ) FRHICommandDrawPrimitive(BaseVertexIndex, NumPrimitives, NumInstances);
 ```
 
-而`AllocCommand`则是开辟了一块`FRHICommandDrawPrimitive`大小的内存, 并将其添加到Command链表中, 这个链表保存了当前添加的所有命令.
+这是一个placement new, `AllocCommand`则是开辟了一块`FRHICommandDrawPrimitive`大小的内存, 并将其添加到Command链表中, 这个链表保存了当前添加的所有命令.
 ```c++
 FORCEINLINE_DEBUGGABLE void* AllocCommand(int32 AllocSize, int32 Alignment)
 {
@@ -1584,15 +1586,6 @@ struct FRHICommandBase
 template<typename TCmd, typename NameType = FUnnamedRhiCommand>
 struct FRHICommand : public FRHICommandBase
 {
-#if RHICOMMAND_CALLSTACK
-	uint64 StackFrames[16];
-
-	FRHICommand()
-	{
-		FPlatformStackWalk::CaptureStackBackTrace(StackFrames, 16);
-	}
-#endif
-
 	void ExecuteAndDestruct(FRHICommandListBase& CmdList, FRHICommandListDebugContext& Context) override final
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE_ON_CHANNEL_STR(NameType::TStr(), RHICommandsChannel);
