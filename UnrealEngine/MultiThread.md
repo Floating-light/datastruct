@@ -459,11 +459,13 @@ void DoWork(IQueuedWork* InQueuedWork)
 `IQueuedWork`是一个抽象接口, 在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外Engine中也有很多特殊的Work.
 ![IQueuedWork](./image/IQueuedWork.png)
 ## TaskGraph
-相比于QueuedWork, TaskGraph中的任务之间还可以指定依赖关系(不能循环依赖), 在不同线程执行的任务之间可以有先后顺序的依赖, 指定前序任务和后序任务.
+和`QueuedWork`类似, 只是其中一部分执行Task的线程有指定的Named, 一般只执行特定类型的Task, 在不同线程执行的任务之间可以有先后顺序的依赖, 可以指定前序任务和后序任务。
 
 ### FTaskGraphInterface和FTaskGraphImplementation
 
-`FTaskGraphInterface`定义了向外部提供的一组功能API, 真正的实现在`FTaskGraphImplementation`. 它的基本功能包括了`FQueuedThreadPool`, 创建一系列的线程, 将Task放入任务队列,这些线程循环从队列中取出任务执行, 这些线程都是一些通用的, 没有特殊目的的线程, 但是在实现方面,`FQueuedThreadPool`中的队列同步都是基于锁的实现, 而`FTaskGraphImplementation`则是基于无锁无等待的实现.  除此之外, 还将Engine中存在着一些专用的线程也纳入管理范围, 比如GameThread用于处理游戏逻辑, RenderingThread处理渲染相关逻辑, AudioThread处理音频相关的事物, UE4中有5个这样的线程:
+`FTaskGraphInterface`是一个抽象接口, 定义了向外部提供的一组功能API, 真正的实现在`FTaskGraphImplementation`. 它的基本功能包括了`FQueuedThreadPool`, 创建一系列的线程, 将Task放入任务队列,这些线程不断地从队列中取出任务执行, 它们都是一些通用的, 没有特殊目的的线程。 但是在实现方面,`FQueuedThreadPool`中的队列同步都是基于锁的实现, 而`FTaskGraphImplementation`则是基于无锁无等待的实现. 
+
+ 除此之外, 还将Engine中存在着一些专用的线程也纳入管理范围, 比如GameThread用于处理游戏逻辑, RenderingThread处理渲染相关逻辑, AudioThread处理音频相关的事物, UE4中有5个这样的线程:
 ```c++
 StatsThread, // 搜集性能统计相关的数据
 RHIThread,   // 执行RenderHardware命令
@@ -555,8 +557,7 @@ class FTaskGraphInterface
 {
 	friend class FBaseGraphTask;
 	// 仅从FBaseGraphTask, 在满足前置任务条件后调用.
-	// 将Task加入到ThreadToExecuteOn线程的Task队列中, 有可能立即执行.
-	// 将Task从CurrentThreadIfKnown添加到任何ThreadToExecuteOn的Task队列中
+	// 从CurrentThreadIfKnown将Task添加到任何ThreadToExecuteOn的Task队列中
 	virtual void QueueTask(class FBaseGraphTask* Task, ENamedThreads::Type ThreadToExecuteOn, ENamedThreads::Type CurrentThreadIfKnown = ENamedThreads::AnyThread) = 0;
 
 public:
@@ -1662,7 +1663,8 @@ void FRHICommandListExecutor::ExecuteInner(FRHICommandListBase& CmdList)
 RHIThreadTask = TGraphTask<FExecuteRHIThreadTask>::CreateTask(&Prereq, ENamedThreads::GetRenderThread()).ConstructAndDispatchWhenReady(SwapCmdList);
 
 ```
-```
+![RHICommandList](./image/RHICommandList.png)
+
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
 
 * https://zhuanlan.zhihu.com/p/38881269
