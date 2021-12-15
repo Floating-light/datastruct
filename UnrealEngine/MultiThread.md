@@ -1502,8 +1502,6 @@ virtual uint32 FRHIThread::Run() override
 
 在使用`ENQUEUE_RENDER_COMMAND(Type)`给RenderThread执行的Lambda中必定会接受一个参数`FRHICommandListImmediate& RHICmdList`, 这个参数一般是在执行RenderThread的Task时, 从RHI模块的一个全局变量传过来的, 在RenderThread中就会通过它发送渲染指令.
 
-TODO: Graphic 
-
 但是这并不会立即给`RHI Thread`执行, 例如:
 ```c++
 void FRHICommandList::DrawPrimitive(uint32 BaseVertexIndex, uint32 NumPrimitives, uint32 NumInstances)
