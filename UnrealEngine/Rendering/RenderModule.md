@@ -61,3 +61,111 @@ void FSceneRenderer::GatherDynamicMeshElements(
     MeshCollector.ProcessTasks();
 }
 ```
+
+```c++
+void FParallelMeshDrawCommandPass::DispatchPassSetup(
+	FScene* Scene,
+	const FViewInfo& View,
+	EMeshPass::Type PassType,
+	FExclusiveDepthStencil::Type BasePassDepthStencilAccess,
+	FMeshPassProcessor* MeshPassProcessor,
+	const TArray<FMeshBatchAndRelevance, SceneRenderingAllocator>& DynamicMeshElements,
+	const TArray<FMeshPassMask, SceneRenderingAllocator>* DynamicMeshElementsPassRelevance,
+	int32 NumDynamicMeshElements,
+	TArray<const FStaticMeshBatch*, SceneRenderingAllocator>& InOutDynamicMeshCommandBuildRequests,
+	int32 NumDynamicMeshCommandBuildRequestElements,
+	FMeshCommandOneFrameArray& InOutMeshDrawCommands,
+	FMeshPassProcessor* MobileBasePassCSMMeshPassProcessor,
+	FMeshCommandOneFrameArray* InOutMobileBasePassCSMMeshDrawCommands
+)
+{
+	// Setup TaskContext
+
+	TaskEventRef = TGraphTask<FMeshDrawCommandPassSetupTask>::CreateTask(nullptr, ENamedThreads::GetRenderThread()).ConstructAndDispatchWhenReady(TaskContext);
+	// 
+		GenerateDynamicMeshDrawCommands(
+		*Context.View,
+		Context.ShadingPath,
+		Context.PassType,
+		Context.MeshPassProcessor,
+		*Context.DynamicMeshElements,
+		Context.DynamicMeshElementsPassRelevance,
+		Context.NumDynamicMeshElements,
+		Context.DynamicMeshCommandBuildRequests,
+		Context.NumDynamicMeshCommandBuildRequestElements,
+		Context.MeshDrawCommands,
+		Context.MeshDrawCommandStorage,
+		Context.MinimalPipelineStatePassSet,
+		Context.NeedsShaderInitialisation
+	);
+		ApplyViewOverridesToMeshDrawCommands(
+		Context.ShadingPath,
+		Context.PassType,
+		Context.bReverseCulling,
+		Context.bRenderSceneTwoSided,
+		Context.BasePassDepthStencilAccess,
+		Context.DefaultBasePassDepthStencilAccess,
+		Context.MeshDrawCommands,
+		Context.MeshDrawCommandStorage,
+		Context.MinimalPipelineStatePassSet,
+		Context.NeedsShaderInitialisation,
+		Context.TempVisibleMeshDrawCommands
+	);
+		UpdateTranslucentMeshSortKeys()	
+			for each VisibleCommand in VisibleMeshCommands
+				udpate VisibleCommand.SortKey.PackedData = SortKey.PackedData;
+
+		BuildMeshDrawCommandPrimitiveIdBuffer()
+	TaskEventRef = TGraphTask<FMeshDrawCommandInitResourcesTask>::CreateTask(&DependentGraphEvents, ENamedThreads::GetRenderThread()).ConstructAndDispatchWhenReady(TaskContext);
+		for each Initializer in Context.MinimalPipelineStatePassSet
+			Initializer.BoundShaderState.LazilyInitShaders();
+}
+
+GenerateDynamicMeshDrawCommands(
+	const FViewInfo& View,
+	EShadingPath ShadingPath,
+	EMeshPass::Type PassType,
+	FMeshPassProcessor* PassMeshProcessor,
+	const TArray<FMeshBatchAndRelevance, SceneRenderingAllocator>& DynamicMeshElements,
+	const TArray<FMeshPassMask, SceneRenderingAllocator>* DynamicMeshElementsPassRelevance,
+	int32 MaxNumDynamicMeshElements,
+	const TArray<const FStaticMeshBatch*, SceneRenderingAllocator>& DynamicMeshCommandBuildRequests,
+	int32 MaxNumBuildRequestElements,
+	FMeshCommandOneFrameArray& VisibleCommands, // 最终的DrawCommand
+	FDynamicMeshDrawCommandStorage& MeshDrawCommandStorage,
+	FGraphicsMinimalPipelineStateSet& MinimalPipelineStatePassSet,
+	bool& NeedsShaderInitialisation
+)
+{
+	FDynamicPassMeshDrawListContext DynamicPassMeshDrawListContext(
+		MeshDrawCommandStorage,
+		VisibleCommands,
+		MinimalPipelineStatePassSet,
+		NeedsShaderInitialisation
+	);
+	PassMeshProcessor->SetDrawListContext(&DynamicPassMeshDrawListContext);
+	for each MeshAndRelevance in DynamicMeshElements
+		PassMeshProcessor->AddMeshBatch(*MeshAndRelevance.Mesh, BatchElementMask, MeshAndRelevance.PrimitiveSceneProxy);
+	for StaticMeshBatch in DynamicMeshCommandBuildRequests
+		PassMeshProcessor->AddMeshBatch(*StaticMeshBatch, DefaultBatchElementMask, StaticMeshBatch->PrimitiveSceneInfo->Proxy, StaticMeshBatch->Id);
+}
+// For example : 
+void FBasePassMeshProcessor::AddMeshBatch(const FMeshBatch& RESTRICT MeshBatch, uint64 BatchElementMask, const FPrimitiveSceneProxy* RESTRICT PrimitiveSceneProxy, int32 StaticMeshId)
+	Process< FUniformLightMapPolicy >(
+								MeshBatch,
+								BatchElementMask,
+								StaticMeshId,
+								PrimitiveSceneProxy,
+								MaterialRenderProxy,
+								Material,
+								BlendMode,
+								ShadingModels,
+								FUniformLightMapPolicy(LMP_DISTANCE_FIELD_SHADOWS_AND_HQ_LIGHTMAP),
+								MeshBatch.LCI,
+								MeshFillMode,
+								MeshCullMode);
+		GetBasePassShaders<LightMapPolicyType>(FMaterial); // 
+		SetDepthStencilStateForBasePass();
+		BuildMeshDrawCommands(); 	
+
+```
