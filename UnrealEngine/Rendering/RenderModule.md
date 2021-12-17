@@ -32,8 +32,12 @@ static void RenderViewFamily_RenderThread(FRHICommandListImmediate& RHICmdList, 
                 for each view
                     SetupMeshPass(View, BasePassDepthStencilAccess, ViewCommands);  
                         for each EMeshPass
+						Create FMeshPassProcessor, Get Pass from ParallelmeshDrawCommandPasses 
                             // 对于此View此Pass创建所有DrawCommand.
                             FParallelMeshDrawCommandPass::DispatchPassSetup(View, FMeshPassProcessor)
+		RenderPrePass()
+			for each Views
+				
 
 ```
 
