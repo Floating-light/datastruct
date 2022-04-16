@@ -53,3 +53,70 @@ template<> struct InternalLinkType<1>
     }
 }
 ```
+
+```c++
+DECLARE_TYPE_LAYOUT(FShader, NonVirtual);
+#define DECLARE_TYPE_LAYOUT(T, Interface) INTERNAL_DECLARE_LAYOUT_BASE(T); INTERNAL_DECLARE_TYPE_LAYOUT(T, Interface, PREPROCESSOR_NOTHING)
+
+private: using InternalBaseType = typename TGetBaseTypeHelper<PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)>::Type; 
+template<typename InternalType> static void InternalInitializeBases(FTypeLayoutDesc& TypeDesc) 
+{ TInitializeBaseHelper<InternalType, InternalBaseType>::Initialize(TypeDesc); }
+
+private: static void InternalDestroy(void* Object, const FTypeLayoutDesc&, const FPointerTableBase* PtrTable); 
+public: RequiredAPI static FTypeLayoutDesc& StaticGetTypeLayout(); 
+public: (virtual ) const FTypeLayoutDesc& GetTypeLayout() const ;
+// INTERNAL_DECLARE_TYPE_LAYOUT_COMMON(T, InInterface)
+
+static const int CounterBase = __COUNTER__; 
+public: using DerivedType = PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T); 
+static const ETypeLayoutInterface::Type InterfaceType = ETypeLayoutInterface::InInterface; 
+// UE_DECLARE_INTERNAL_LINK_BASE(InternalLinkType)
+template<int Counter> struct InternalLinkType { 
+	UE_STATIC_ONLY(InternalLinkType); // Empty
+ 	static FORCEINLINE void Initialize(FTypeLayoutDesc&TypeDesc) {} 
+}
+```
+
+```c++
+IMPLEMENT_TYPE_LAYOUT(FShader);
+
+IMPLEMENT_TEMPLATE_TYPE_LAYOUT(, T)
+
+// Expand 
+1. IMPLEMENT_UNREGISTERED_TEMPLATE_TYPE_LAYOUT(TemplatePrefix, T); \
+2. INTERNAL_REGISTER_TYPE_LAYOUT(T)
+
+1-> Expand (,FShader)
+INTERNAL_IMPLEMENT_TYPE_LAYOUT_COMMON(, FShader); 
+	PREPROCESSOR_REMOVE_OPTIONAL_PARENS(TemplatePrefix) void PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)::InternalDestroy(void* Object, const FTypeLayoutDesc&, const FPointerTableBase* PtrTable) { 
+		Freeze::CleanupObject(static_cast<PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)*>(Object), PtrTable); 
+		Freeze::CallDestructor(static_cast<PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)*>(Object)); 
+	} 
+	FTypeLayoutDesc& T::StaticGetTypeLayout() { 
+		static_assert(TValidateInterfaceHelper<T, InterfaceType>::Value, "Invalid interface for " #T); 
+		alignas(FTypeLayoutDesc) static uint8 TypeBuffer[sizeof(FTypeLayoutDesc)] = { 0 }; 
+		FTypeLayoutDesc& TypeDesc = *(FTypeLayoutDesc*)TypeBuffer; 
+		if (!TypeDesc.IsInitialized) { 
+			TypeDesc.IsInitialized = true; 
+			TypeDesc.Name = TEXT(#T); 
+			TypeDesc.WriteFrozenMemoryImageFunc = TGetFreezeImageHelper<PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)>::Do(); 
+			TypeDesc.UnfrozenCopyFunc = &Freeze::DefaultUnfrozenCopy; 
+			TypeDesc.AppendHashFunc = &Freeze::DefaultAppendHash; 
+			TypeDesc.GetTargetAlignmentFunc = &Freeze::DefaultGetTargetAlignment; 
+			TypeDesc.ToStringFunc = &Freeze::DefaultToString; 
+			TypeDesc.DestroyFunc = &InternalDestroy; 
+			TypeDesc.Size = sizeof(PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)); 
+			TypeDesc.Alignment = alignof(PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)); 
+			TypeDesc.Interface = InterfaceType; 
+			TypeDesc.SizeFromFields = ~0u; 
+			TypeDesc.GetDefaultObjectFunc = &TGetDefaultObjectHelper<PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T), InterfaceType>::Do; 
+			InternalLinkType<1>::Initialize(TypeDesc); 
+			InternalInitializeBases<PREPROCESSOR_REMOVE_OPTIONAL_PARENS(T)>(TypeDesc); 
+			FTypeLayoutDesc::Initialize(TypeDesc); 
+		} 
+		return TypeDesc; }
+const FTypeLayoutDesc& FShader::GetTypeLayout() const { return StaticGetTypeLayout(); }
+
+2-> Expand T-->FShader
+static const FDelayedAutoRegisterHelper PREPROCESSOR_JOIN(DelayedAutoRegisterHelper, __COUNTER__)(DelayedAutoRegisterHelper)(EDelayedRegisterRunPhase::ShaderTypesReady, []{ FTypeLayoutDesc::Register(T::StaticGetTypeLayout()); });
+```
