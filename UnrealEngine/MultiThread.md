@@ -1,11 +1,27 @@
-# UE4 多线程渲染基础
 
-这篇文章主要目的是分析UE4的多线程渲染实现. 基于此目的, 先深入分析了UE4中多线程的实现, 其中最重要的是TaskGraph的实现，多线程渲染就是基于它实现的。最后梳理了整个多线程渲染的流程，Gamethread，RenderThread，RHI Thread三者的交互方式。
+# UE4-TaskGraph
+这篇文章分析了UE4中有关多线程的部分系统. 包括`Thread`的基本跨平台实现, 和基于此的`QueuedThreadPool`和`TaskGraph`, 重点在于`TaskGraph`, 因为`UE4`中的大部分线程之间的交互都是通过它完成的.尤其是多线程渲染, 所以也会简单提到关于渲染的线程之间的交互.
 
-## FRunnable
+这里参考了许多大佬们的文章, 站在巨人们的肩膀上才能看的更远, 感谢各位大佬(&#x1F601;).
 
-`FRunnable`是所有多线程执行的Runnable对象的基类, 它定义了按一定顺序在创建的线程中执行的接口.
+* [1. FRunnable](#1-frunnable)
+* [2. FRunnableThread](#2-frunnablethread)
+* [3. QueuedWork](#3-queuedwork)
+	* [3.1 FQueuedThreadPoolBase实现](#31-fqueuedthreadpoolbase实现)
+	* [3.2 IQueuedWork](#32-iqueuedwork)
+* [4. TaskGraph](#4-taskgraph)
+	* [4.1 FTaskGraphInterface和FTaskGraphImplementation](#41-ftaskgraphinterface和ftaskgraphimplementation)
+    * [4.2 FBaseGraphTask](#42-fbasegraphtask)
+	* [4.3 FGraphEvent](#43-fgraphevent)
+	* [4.4 TGraphTask](#44-tgraphtask)
+	* [4.5 实例](#45-实例)
+* [5. 多线程渲染](#5-多线程渲染)
+	* [5.1 渲染线程](#51-渲染线程)
+	* [5.2 RHI线程](#52-rhi线程)
+* [Reference](#reference)
 
+## 1. FRunnable
+`FRunnable`是所有多线程执行的`Runnable`对象的基类, 它定义了按一定顺序在创建的线程中执行的接口.
 ```c++
 class CORE_API FRunnable
 {
@@ -16,10 +32,8 @@ public:
 	virtual void Exit() { }
 };
 ```
-
 这个对象中的这些方法均会新的线程内调用.
 其部分子类:
-
 ```
 FRenderingThread
 FRHIThread
@@ -29,13 +43,10 @@ FQueuedThread
 TAsyncRunnable
 FAsyncPurge
 ```
+`FRunnable`仅仅是定义了期望多线程执行的逻辑, 它需要有真正的线程`(FRunnableThread)`执行它. 上面那些`FRunnable`对象的子类`FRenderingThread`或`FRHIThread`,名字听起来像线程对象, 但他并不是.
 
-FRunnable仅仅是定义了期望多线程执行的逻辑, 它需要有真正的线程 `(FRunnableThread)`执行它. 上面那些 `FRunnable`对象的子类 `FRenderingThread`或 `FRHIThread`,名字听起来像线程对象, 但他并不是.
-
-## FRunnableThread
-
-这才是线程本体.它提供了一些管理线程对象本身生命周期的接口. FRunnableThread在创建时, 接收一个FRunnable对象实例, 用平台相关的接口创建出真正的线程, 并执行真线程的入口函数, 其中会执行传入的FRunnable.
-
+## 2. FRunnableThread
+这才是线程本体.它提供了一些管理线程对象本身生命周期的接口. `FRunnableThread`在创建时, 接收一个`FRunnable`对象实例, 用平台相关的接口创建出真正的线程, 并执行真线程的入口函数, 其中会执行传入的`FRunnable`.
 ```c++
 class CORE_API FRunnableThread
 {
@@ -71,9 +82,7 @@ private:
 	static void SetupCreatedThread(FRunnableThread*& NewThread, class FRunnable* InRunnable, const TCHAR* ThreadName, uint32 InStackSize, EThreadPriority InThreadPri, uint64 InThreadAffinityMask, EThreadCreateFlags InCreateFlags);
 };
 ```
-
-在Windows平台下其实现:
-
+在`Windows`平台下其实现:
 ```c++
 	virtual bool CreateInternal( FRunnable* InRunnable, const TCHAR* InThreadName,
 		uint32 InStackSize = 0,
@@ -132,8 +141,7 @@ private:
 	}
 ```
 
-其中入口函数:
-
+其中入口函数: 
 ```c++
 static ::DWORD STDCALL _ThreadProc( LPVOID pThis )
 {
@@ -143,12 +151,10 @@ static ::DWORD STDCALL _ThreadProc( LPVOID pThis )
 	return ThisThread->GuardedRun();
 }
 ```
-
-pThis为WinAPI创建线程时传入的当前FRunnableThread对象指针.这里将创建的线程添加到 `FThreadManager`中管理, 里它实现了在不支持多线程时, 转为单线程执行(Tick FRunnable):
-
+`pThis`为`WinAPI`创建线程时传入的当前`FRunnableThread`对象指针.这里将创建的线程添加到`FThreadManager`中管理, 里它实现了在不支持多线程时, 转为单线程执行`(Tick FRunnable)`:
 ```c++
 void FThreadManager::Tick()
-{
+{	
 	const bool bIsSingleThreadEnvironment = FPlatformProcess::SupportsMultithreading() == false;
 	if (bIsSingleThreadEnvironment)
 	{
@@ -168,9 +174,7 @@ void FThreadManager::Tick()
 	}
 }
 ```
-
-其中 `GuardedRun()`最终调用 `Run()`开始执行FRunnable:
-
+ 其中`GuardedRun()`最终调用`Run()`开始执行`FRunnable`:
 ```c++
 uint32 FRunnableThreadWin::Run()
 {
@@ -206,17 +210,13 @@ uint32 FRunnableThreadWin::Run()
 	return ExitCode;
 }
 ```
-
-这里保证了FRunnable中的接口的执行顺序. 在 `CreateInternal()`创建线程之后, 并不是立即返回, 而是等待一个同步事件:
-
+这里保证了`FRunnable`中的接口的执行顺序. 在`CreateInternal()`创建线程之后, 并不是立即返回, 而是等待一个同步事件:
 ```c++
 // Let the thread start up
 ThreadInitSyncEvent->Wait(INFINITE);
 ```
-
-这个事件就是在 `Run()`中执行完 `Runnable->Init()`之后发出的.这就保证了, `FRunnableThread::Create()`一定是在 `FRunnable`初始化完之后才会返回.
+这个事件就是在`Run()`中执行完`Runnable->Init()`之后发出的.这就保证了, `FRunnableThread::Create()`一定是在`FRunnable`初始化完之后才会返回.
 除此之外还有许多其它平台的实现:
-
 ```
 FRunnableThreadPThread
     FRunnableThreadApple
@@ -228,7 +228,6 @@ FRunnableThreadHoloLens
 ```
 
 所以, 这组API的使用流程大概就是:
-
 ```c++
 //  先继承FRunnable, 实现要多线程执行的逻辑.
 //  class MyRunnableTest : public FRunnable;
@@ -244,12 +243,10 @@ MyThread->WaitForCompletion();
 delete MyThread;
 delete MyRunnable;
 ```
-
 但是一般都不会直接用它, 而是基于它封装的另外两组多线程接口.
 
-## QueuedWork
-
-`QueuedWork`的基本想法是, 将需要多线程执行的任务放到一个任务队列中, 在线程池中的线程取出这些任务并执行.通常的用法, 首先需要实现需要多线程执行的Task:
+## 3. QueuedWork
+`QueuedWork`的基本想法是, 将需要多线程执行的任务放到一个任务队列中, 在线程池中的线程取出这些任务并执行.通常的用法, 首先需要实现需要多线程执行的`Task`:
 
 ```c++
 class FExampleAsyncTask : public FNonAbandonableTask
@@ -287,9 +284,7 @@ private:
 	}
 };
 ```
-
 使用时:
-
 ```c++
 FAsyncTask<FExampleAsyncTask>* MyTask = new FAsyncTask<FExampleAsyncTask>(10);
 // 开始执行
@@ -307,11 +302,9 @@ MyTask->EnsureCompletion(); // 等待直到完成
 }
 delete MyTask;
 ```
+`FAsyncTask`是Engine实现好的一种`IQueuedWork`, 提供了Work完成相关的同步操作, 当确保Work执行完之后要手动清除这个任务(或者重复利用). 
 
-`FAsyncTask`是Engine实现好的一种 `IQueuedWork`, 提供了Work完成相关的同步操作, 当确保Work执行完之后要手动清除这个任务(或者重复利用).
-
-还有一种 `FAutoDeleteAsyncTask`, 会在执行完之后自动 `delete this`(从Pool thread).
-
+还有一种`FAutoDeleteAsyncTask`, 会在执行完之后自动`delete this`(从Pool thread).
 ```c++
 // FAutoDeleteAsyncTask::DoWork
 void DoWork()
@@ -323,15 +316,12 @@ void DoWork()
 	delete this;
 }
 ```
-
-### 实现
-
-首先有一个线程池 `FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程. 这些线程会在一个队列 `(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务 `IQueuedWork`都需要被添加到任务队列 `QueuedWork`中排队等待执行.这里所有的同步都是基于锁和事件的.
+### 3.1 FQueuedThreadPoolBase实现
+首先有一个线程池`FQueuedThreadPoolBase`, 在启动时会根据硬件条件创建一定数量的线程. 这些线程会在一个队列`(QueuedThreads)`中排队等待执行任务.所有希望多线程执行的任务`IQueuedWork`都需要被添加到任务队列`QueuedWork`中排队等待执行.这里所有的同步都是基于锁和事件的.
 
 ![](./image/ThreadPool.png)
 
-通常我们创建的Work都在一个全局线程池 `GThreadPool`中执行, 它是在Engine的启动流程中创建的, 池中的线程数由当前机器的核心数和是否是Server决定.
-
+通常我们创建的`Work`都在一个全局线程池`GThreadPool`中执行, 它是在`Engine`的启动流程中创建的, 池中的线程数由当前机器的核心数和是否是`Server`决定.
 ```c++
 // int32 FEngineLoop::PreInitPreStartupScreen(const TCHAR* CmdLine)
 {
@@ -346,9 +336,7 @@ void DoWork()
 	verify(GThreadPool->Create(NumThreadsInThreadPool, StackSize * 1024, TPri_SlightlyBelowNormal, TEXT("ThreadPool")));
 }
 ```
-
-`FQueuedThreadPool::Allocate()`返回的就是 `FQueuedThreadPoolBase`的实例.其真正的创建过程是在 `FQueuedThreadPoolBase::Create`, 直接创建给定数量的线程, 并添加到 `AllThreads`和空闲线程队列中 `QueuedThreads`.这里并不是直接创建的 `FRunnableThread`, 而是创建 `FQueuedThread(FRunnable)`, 而且线程队列中持有的也是它, 真正的线程由 `FQueuedThread`自己创建并负责其生命周期:
-
+`FQueuedThreadPool::Allocate()`返回的就是`FQueuedThreadPoolBase`的实例.其真正的创建过程是在`FQueuedThreadPoolBase::Create`, 直接创建给定数量的线程, 并添加到`AllThreads`和空闲线程队列中`QueuedThreads`.这里并不是直接创建的`FRunnableThread`, 而是创建`FQueuedThread(FRunnable)`, 而且线程队列中持有的也是它, 真正的线程由`FQueuedThread`自己创建并负责其生命周期:
 ```c++
 // class FQueuedThread : public FRunnable
 virtual bool Create(class FQueuedThreadPoolBase* InPool,uint32 InStackSize = 0,EThreadPriority ThreadPriority=TPri_Normal)
@@ -364,9 +352,7 @@ virtual bool Create(class FQueuedThreadPoolBase* InPool,uint32 InStackSize = 0,E
 	return true;
 }
 ```
-
-创建好的线程立即就会开始执行 `FQueuedThread::Run()`:
-
+创建好的线程立即就会开始执行`FQueuedThread::Run()`:
 ```c++
 uint32
 FQueuedThread::Run()
@@ -412,10 +398,11 @@ FQueuedThread::Run()
 	return 0;
 }
 ```
+创建好的`FQueuedThread`只存在两种状态, 要么被放在`QueuedThread`队列中, 处于空闲状态. 要么处于忙碌状态, 不停地从任务队列中取出任务来执行.
 
-创建好的 `FQueuedThread`只存在两种状态, 要么被放在QueuedThread队列中, 处于空闲状态. 要么处于忙碌状态, 不停地从任务队列中取出任务来执行.
 ![QueuedThreadStateTransform](./image/QueuedThreadStateTransfrom.png)
-`ReturnToPoolOrGetNextJob(this)`会尝试从任务队列中拿出一个Work继续执行, 如果没有, 则把传入的Thread加入到空闲线程队列中, 并进入休眠状态, 直到下一次调用 `DoWork()`通过事件唤醒.
+
+`ReturnToPoolOrGetNextJob(this)`会尝试从任务队列中拿出一个`Work`继续执行, 如果没有, 则把传入的`Thread`加入到空闲线程队列中, 并进入休眠状态, 直到下一次调用`DoWork()`通过事件唤醒.
 
 ```c++
 IQueuedWork* ReturnToPoolOrGetNextJob(FQueuedThread* InQueuedThread)
@@ -441,14 +428,11 @@ IQueuedWork* ReturnToPoolOrGetNextJob(FQueuedThread* InQueuedThread)
 }
 ```
 
-至此整个线程队列就初始化完了, 随后就可以使用它多线程执行Work:
-
+至此整个线程队列就初始化完了, 随后就可以使用它多线程执行`Work`:
 ```c++
 GThreadPool->AddQueuedWork(IQueuedWork* InWork);
 ```
-
 其实现细节:
-
 ```c++
 void AddQueuedWork(IQueuedWork* InQueuedWork) override
 {
@@ -480,9 +464,7 @@ void AddQueuedWork(IQueuedWork* InQueuedWork) override
 	Thread->DoWork(InQueuedWork);
 }
 ```
-
-由于空闲线程队列中的线程都处于休眠状态 `(DoWorkEvent->Wait())`, `DoWorkEvent->Trigger()`会使 `DoWorkEvent->Wait()`返回, Worker线程主循环和DoWork()对 `QueuedWork`的读写都没有加锁, 这是在逻辑上保证了它们不会冲突. 为确保在多处理器情况下的写入同步, 每次对 `QueuedWork`的更改后都需要调用 `FPlatformMisc::MemoryBarrier()`, 以确保当前写入对其它处理器可见.
-
+由于空闲线程队列中的线程都处于休眠状态`(DoWorkEvent->Wait())`, `DoWorkEvent->Trigger()`会使`DoWorkEvent->Wait()`返回, Worker线程主循环和DoWork()对`QueuedWork`的读写都没有加锁, 这是在逻辑上保证了它们不会冲突. 为确保在多处理器情况下的写入同步, 每次对`QueuedWork`的更改后都需要调用`FPlatformMisc::MemoryBarrier()`, 以确保当前写入对其它处理器可见.
 ```c++
 void DoWork(IQueuedWork* InQueuedWork)
 {
@@ -497,21 +479,20 @@ void DoWork(IQueuedWork* InQueuedWork)
 }
 ```
 
-### IQueuedWork
+### 3.2 IQueuedWork
+`IQueuedWork`是一个抽象接口, 在实现具体的`Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用`IQueuedWork`, 而是其派生的`FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外`Engine`中也有很多特殊的`Work`.
 
-`IQueuedWork`是一个抽象接口, 在实现具体的 `Work`时, 常常还需要考虑任务执行完的同步的问题, 所以一般不直接使用 `IQueuedWork`, 而是其派生的 `FAsyncTask<TTask>`, 可以方便地查询任务是否完成, 或等待任务完成.`TAsyncQueuedWork<ResultType>`可以多线程执行一个函数并获取它的返回值.此外Engine中也有很多特殊的Work.
 ![IQueuedWork](./image/IQueuedWork.png)
 
-## TaskGraph
+## 4. TaskGraph
 
-和 `QueuedWork`类似, 只是其中一部分执行Task的线程有指定的Named, 一般只执行特定类型的Task, 在不同线程执行的任务之间可以有先后顺序的依赖, 可以指定前序任务和后序任务。
+和`QueuedWork`类似, 只是其中一部分执行`Task`的线程有指定的`Named`, 一般只执行特定类型的`Task`, 在不同线程执行的任务之间可以有先后顺序的依赖, 可以指定前序任务和后序任务。
 
-### FTaskGraphInterface和FTaskGraphImplementation
+### 4.1 FTaskGraphInterface和FTaskGraphImplementation
 
-`FTaskGraphInterface`是一个抽象接口, 定义了向外部提供的一组功能API, 真正的实现在 `FTaskGraphImplementation`. 它的基本功能包括了 `FQueuedThreadPool`, 创建一系列的线程, 将Task放入任务队列,这些线程不断地从队列中取出任务执行, 它们都是一些通用的, 没有特殊目的的线程。 但是在实现方面,`FQueuedThreadPool`中的队列同步都是基于锁的实现, 而 `FTaskGraphImplementation`则是基于无锁无等待的实现.
+`FTaskGraphInterface`是一个抽象接口, 定义了向外部提供的一组功能API, 真正的实现在`FTaskGraphImplementation`. 它的基本功能包括了`FQueuedThreadPool`, 创建一系列的线程, 将`Task`放入任务队列,这些线程不断地从队列中取出任务执行, 它们都是一些通用的, 没有特殊目的的线程。 但是在实现方面,`FQueuedThreadPool`中的队列同步都是基于锁的实现, 而`FTaskGraphImplementation`则是基于无锁无等待的实现. 
 
-除此之外, 还将Engine中存在着一些专用的线程也纳入管理范围, 比如GameThread用于处理游戏逻辑, RenderingThread处理渲染相关逻辑, AudioThread处理音频相关的事物, UE4中有5个这样的线程:
-
+ 除此之外, 还将`Engine`中存在着一些专用的线程也纳入管理范围, 比如`GameThread`用于处理游戏逻辑, `RenderingThread`处理渲染相关逻辑, `AudioThread`处理音频相关的事物, `UE4`中有5个这样的线程:
 ```c++
 StatsThread, // 搜集性能统计相关的数据
 RHIThread,   // 执行RenderHardware命令
@@ -519,10 +500,8 @@ AudioThread, // 音频处理
 GameThread,  // 游戏逻辑
 ActualRenderingThread = GameThread + 1, // 处理渲染相关逻辑
 ```
-
-而且这些线程通常是在Engine初始化阶段在各个功能模块创建的, `FTaskGraphInterface`中将这些线程称为 `NamedThread`, 而其它Worker线程称为 `AnyThread`或 `UnnamedThread`.
-`ENamedThreads`定义了这些Thread的名字的枚举, 和一些Mask, 还有优先级相关的一些Mask组合.
-
+而且这些线程通常是在`Engine`初始化阶段在各个功能模块创建的, `FTaskGraphInterface`中将这些线程称为`NamedThread`, 而其它`Worker`线程称为`AnyThread`或`UnnamedThread`. 
+`ENamedThreads`定义了这些`Thread`的名字的枚举, 和一些`Mask`, 还有优先级相关的一些`Mask`组合.
 ```c++
 namespace ENamedThreads
 {
@@ -588,19 +567,17 @@ namespace ENamedThreads
 	};
 }
 ```
-
 ![sad](./taskgraph_type.png)
 
-这里,
-
-* 低八位表示NamedThread
+这里, 
+* 低八位表示NamedThread 
 * 第九位表示NamedThread的Task队列索引, 也就是说每个NamedTread有两个队列MainQueue和LocalQueue.
-* 第十位表示Task本身的优先级, 有两种 `NormalTaskPriority`和 `HighTaskPriority`.
-* 第十一和十二位表示Anythread的优先级, 有三种 `NormalThreadPriority`, `HighThreadPriority`和 `BackgroundThreadPriority`
+* 第十位表示Task本身的优先级, 有两种`NormalTaskPriority`和`HighTaskPriority`.
+* 第十一和十二位表示Anythread的优先级, 有三种`NormalThreadPriority`, `HighThreadPriority`和`BackgroundThreadPriority`
 
-`FTaskGraphInterface`希望能将这两者结合在一起管理. 因为总会有一些Task会希望在特定的线程执行, 就必须要有统一的管理方式才能处理这些Thread中的Task之间的依赖.`FTaskGraphInterface`接口上将 `NamedThread`和 `AnyThread`的差异抹去, 而由 `FTaskGraphImplementation`和 `FWorkerThread`处理这些差异.
+`FTaskGraphInterface`希望能将这两者结合在一起管理. 因为总会有一些Task会希望在特定的线程执行, 就必须要有统一的管理方式才能处理这些Thread中的Task之间的依赖.`FTaskGraphInterface`接口上将`NamedThread`和`AnyThread`的差异抹去, 而由`FTaskGraphImplementation`和`FWorkerThread`处理这些差异.
 
-`FTaskGraphInterface`依赖 `FBaseGraphTask`, 可以将 `Task`从任何 `Thread`添加到任何 `Thread`的 `Task`队列中.还提供了让 `NamedThread`执行它的队列中的 `Task`的一系列方法.(`AnyThread`的 `Task`的执行与 `FQueuedThreadPool`的逻辑一样).
+`FTaskGraphInterface`依赖`FBaseGraphTask`, 可以将`Task`从任何`Thread`添加到任何`Thread`的`Task`队列中.还提供了让`NamedThread`执行它的队列中的`Task`的一系列方法.(`AnyThread`的`Task`的执行与`FQueuedThreadPool`的逻辑一样).
 
 ```c++
 class FTaskGraphInterface
@@ -618,7 +595,7 @@ public:
 	// Destruct 所有Worker
 	static CORE_API void Shutdown();
 	static CORE_API FTaskGraphInterface& Get();
-
+	
 	// 以下仅用于外部Thread(真NamedThread)
 	// 将当前线程和NamedThread关联, 通常只初始化TLS信息.
 	virtual void AttachToThread(ENamedThreads::Type CurrentThread)=0;
@@ -639,17 +616,14 @@ public:
 	virtual void TriggerEventWhenTasksComplete(FEvent* InEvent, const FGraphEventArray& Tasks, ENamedThreads::Type CurrentThreadIfKnown = ENamedThreads::AnyThread, ENamedThreads::Type TriggerThread = ENamedThreads::AnyHiPriThreadHiPriTask)=0;
 };
 ```
-
-`FTaskGraphInterface`在 `Engine`初始化阶段创建:
-
+`FTaskGraphInterface`在`Engine`初始化阶段创建:
 ```c++
 //  LaunchEngineLoop.cpp Line: 2018
 FTaskGraphInterface::Startup(FPlatformMisc::NumberOfCores());
 FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread);
 ```
 
-`Startup()`主要作用是创建指定数量的 `WorkerThreads`,一个Worker由一个Runnable对象和一个前面提到的FRunnableThread组成.
-
+`Startup()`主要作用是创建指定数量的`WorkerThreads`,一个`Worker`由一个`Runnable`对象和一个前面提到的`FRunnableThread`组成.
 ```c++
 struct FWorkerThread
 {
@@ -658,10 +632,8 @@ struct FWorkerThread
 	bool				bAttached;
 };
 ```
-
-其中一定会创建这几个基本NamedThread, 并至少创建一个UnamedThread, 在此基础上, 核心数越多UnamedThread的数量越多.一般情况下每种优先级的Anythread都有和核心数-1一样的线程数, 但被限制不能超过26个,5 + 3*26 = 83, 即最大线程数.
-首先会创建所有WorkerThreads的Runnable:
-
+其中一定会创建这几个基本`NamedThread`, 并至少创建一个`UnamedThread`, 在此基础上, 核心数越多`UnamedThread`的数量越多.一般情况下每种优先级的`Anythread`都有和核心数-1一样的线程数, 但被限制不能超过26个,5 + 3*26 = 83, 即最大线程数.
+首先会创建所有`WorkerThreads`的`Runnable`:
 ```c++
 	FTaskGraphImplementation(int32)
 	{
@@ -694,7 +666,7 @@ struct FWorkerThread
 				NumTaskThreads = CVar_ForkedProcess_MaxWorkerThreads;
 			}
 		}
-
+		
 		NumNamedThreads = LastExternalThread + 1;
 		// Anythread的优先级总数, 一般有三种优先级
 		NumTaskThreadSets = 1 + bCreatedHiPriorityThreads + bCreatedBackgroundPriorityThreads;
@@ -795,23 +767,21 @@ struct FWorkerThread
 			{
 				WorkerThreads[ThreadIndex].RunnableThread = FRunnableThread::Create(&Thread(ThreadIndex), *Name, StackSize, ThreadPri, Affinity); 
 			}
-
+			
 			WorkerThreads[ThreadIndex].bAttached = true;
 		}
 		Trace::ThreadGroupEnd();
 	}
 ```
-
-显然NamedThread和AnyThread有着不同的FRunnable的实现.随后, 对于UnamedThread会马上创建对应的 `FRunnableThread`, 所有AnyThread都会被指定优先级, 即前面提到的三种优先级, 所有AnyThread会被平均分为三种优先级, 这些Worker马上就进入等待执行任务的状态:
+显然`NamedThread`和`AnyThread`有着不同的`FRunnable`的实现.随后, 对于`UnamedThread`会马上创建对应的`FRunnableThread`, 所有`AnyThread`都会被指定优先级, 即前面提到的三种优先级, 所有`AnyThread`会被平均分为三种优先级, 这些`Worker`马上就进入等待执行任务的状态:
 
 ![threadNum](./taskgraph_threadNum.png)
 
-三种优先级的AnyThread使用不同的Tread优先级任务队列 `IncomingAnyThreadTasks[3]`, 由 `FTaskGraphImplementation`持有, 没有显式指定优先级的Task就是 `NormalThreadPriority`. 每一种Thread优先级都有两个队列, 表示Task的优先级,这些队列都是无锁实现. 这些Thread会根据自己的优先级到相应的队列中取出Task执行.
+三种优先级的`AnyThread`使用不同的`Tread`优先级任务队列`IncomingAnyThreadTasks[3]`, 由`FTaskGraphImplementation`持有, 没有显式指定优先级的Task就是`NormalThreadPriority`. 每一种`Thread`优先级都有两个队列, 表示`Task`的优先级,这些队列都是无锁实现. 这些`Thread`会根据自己的优先级到相应的队列中取出`Task`执行.
 
-而 `NamedThread`不会创建 `FRunnableThread`, 它们真正执行 `Task`的 `Thread`由对应的模块创建, 并自己调用 `FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread)`和对应的 `Worker`相关联.在 `NamedThread`的 `FNamedTaskThread`的实现中, 持有两个任务队列, 所有期望 `NamedThread`执行的 `Task`都会入队到各自的队列中, 真正的 `NamedThread`在恰当的时候调用 `FTaskGraphInterface`的接口执行自己队列中的任务.
+而`NamedThread`不会创建`FRunnableThread`, 它们真正执行`Task`的`Thread`由对应的模块创建, 并自己调用`FTaskGraphInterface::Get().AttachToThread(ENamedThreads::GameThread)`和对应的`Worker`相关联.在`NamedThread`的`FNamedTaskThread`的实现中, 持有两个任务队列, 所有期望`NamedThread`执行的`Task`都会入队到各自的队列中, 真正的`NamedThread`在恰当的时候调用`FTaskGraphInterface`的接口执行自己队列中的任务.
 
-比如GameThread主队列中的Task, 是在Game主循环的每一帧末尾同步的时候:
-
+比如`GameThread`主队列中的`Task`, 是在`Game`主循环的每一帧末尾同步的时候:
 ```c++
 bool bEmptyGameThreadTasks = !FTaskGraphInterface::Get().IsThreadProcessingTask(ENamedThreads::GameThread);
 
@@ -821,11 +791,10 @@ if (bEmptyGameThreadTasks)
 	FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
 }
 ```
+`ProcessThreadUntilIdle`会找到之前创建的GameThread 的`TaskGraphWorker`, 把其队列中所有Task执行完毕才会返回.
 
-`ProcessThreadUntilIdle`会找到之前创建的GameThread 的 `TaskGraphWorker`, 把其队列中所有Task执行完毕才会返回.
 
-例如 `AudioThread`, 其在外部(Audio模块)创建了它的Thread对象和对应的Runnable, 在AudioThreadRunnable的Run()函数中调用了
-
+例如`AudioThread`, 其在外部`(Audio模块)`创建了它的`Thread`对象和对应的`Runnable`, 在`AudioThreadRunnable`的`Run()`函数中调用了
 ```c++
 void AudioThreadMain( FEvent* TaskGraphBoundSyncEvent )
 {
@@ -842,13 +811,10 @@ void AudioThreadMain( FEvent* TaskGraphBoundSyncEvent )
 	FPlatformMisc::MemoryBarrier();
 }
 ```
-
-这里 `ProcessThreadUntilRequestReturn`会进入AudioThread的 `TaskGraphWorker`中循环执行AudioThread的Task.
+这里`ProcessThreadUntilRequestReturn`会进入`AudioThread`的`TaskGraphWorker`中循环执行`AudioThread`的`Task.`
 ![](./image/TaskGraphinterface.png)
-
-### FBaseGraphTask
-
-`FBaseGraphTask`向 `FTaskGraphInterface`提供具体Task执行的入口 `Execute`, 处理与FTaskGraphInterface的耦合.还有前置依赖Task的计数, 用于确定何时将Task放入TaskGraph队列中.而具体依赖关系的实现并不是在这处理,而是给唯一子类 `TGraphTask<TTask>`, 还有 `Execute`的实现, 这也与 `FGraphEvent`相关.
+### 4.2 FBaseGraphTask
+`FBaseGraphTask`向`FTaskGraphInterface`提供具体`Task`执行的入口`Execute`, 处理与`FTaskGraphInterface`的耦合.还有前置依赖`Task`的计数, 用于确定何时将`Task`放入`TaskGraph`队列中.而具体依赖关系的实现并不是在这处理,而是给唯一子类`TGraphTask<TTask>`, 还有`Execute`的实现, 这也与`FGraphEvent`相关.
 
 ```c++
 class FBaseGraphTask
@@ -909,10 +875,8 @@ private:
 	FThreadSafeCounter			NumberOfPrerequistitesOutstanding; 
 };
 ```
-
-### FGraphEvent
-
-`FGraphEvent`表示一个Task完成的事件.所以 `FGraphEvent`总是和一个Task相关, 它也是在一个Task初始化的时候创建的.`FGraphEvent`实现了Task之间的依赖关系, 在一个Task执行完成之后, 与其相关的Event就算完成了, 马上Event就会处理所有依赖于自己的后续Task(FBaseGraphTask->ConditionalQueueTask).
+### 4.3 FGraphEvent
+`FGraphEvent`表示一个`Task`完成的事件.所以`FGraphEvent`总是和一个`Task`相关, 它也是在一个`Task`初始化的时候创建的.`FGraphEvent`实现了`Task`之间的依赖关系, 在一个`Task`执行完成之后, 与其相关的`Event`就算完成了, 马上`Event`就会处理所有依赖于自己的后续`Task(FBaseGraphTask->ConditionalQueueTask)`.
 
 ```c++
 class FGraphEvent 
@@ -961,13 +925,11 @@ private:
 };
 
 ```
+`EventsToWaitFor`是在执行`Task`的业务逻辑`(FMyTask::DoTask)`中添加的子`Task`(通过`DontCompleteUntil(Event)`),只有当这些子`Task`的`Event`完成时, 当前`Task`才会完成.
 
-`EventsToWaitFor`是在执行Task的业务逻辑 `(FMyTask::DoTask)`中添加的子Task(通过 `DontCompleteUntil(Event)`),只有当这些子Task的Event完成时, 当前Task才会完成.
+### 4.4 TGraphTask
 
-### TGraphTask `<TTask>`
-
-`TGraphTask<TTask>`嵌入用户定义的Task, 并依赖于FGraphEvent处理前置和后续Task.
-
+`TGraphTask<TTask>`嵌入用户定义的`Task`, 并依赖于`FGraphEvent`处理前置和后续`Task`.
 ```c++
 template<typename TTask>
 class TGraphTask final : public FBaseGraphTask
@@ -1060,7 +1022,7 @@ private:
 		{
 			Subsequents->CheckDontCompleteUntilIsEmpty(); // we can only add wait for tasks while executing the task
 		}
-
+		
 		TTask& Task = *(TTask*)&TaskStorage;
 		{
 			FScopeCycleCounter Scope(Task.GetStatId(), true); 
@@ -1068,7 +1030,7 @@ private:
 			Task.~TTask();
 			checkThreadGraph(ENamedThreads::GetThreadIndex(CurrentThread) <= ENamedThreads::GetRenderThread() || FMemStack::Get().IsEmpty()); // you must mark and pop memstacks if you use them in tasks! Named threads are excepted.
 		}
-
+		
 		TaskConstructed = false;
 
 		if (TTask::GetSubsequentsMode() == ESubsequentsMode::TrackSubsequents)
@@ -1143,13 +1105,9 @@ private:
 	FGraphEventRef				Subsequents;
 };
 ```
-
 ![family](./image/TaskGraph_family.png)
-
-### 实例
-
-假如我们需要得到很多素数,希望能够多线程快速计算出来,首先需要实现一个TTask:
-
+### 4.5 实例
+假如我们需要得到很多素数,希望能够多线程快速计算出来,首先需要实现一个`TTask`:
 ```c++
 class FMyTask
 {
@@ -1210,13 +1168,11 @@ public:
 	int32 End;
 };
 ```
-
-这个Task完成的主要任务就是找到Range[Begin, End]中的所有素数.
+这个`Task`完成的主要任务就是找到`Range[Begin, End]`中的所有素数.
 
 ```c++
 FGraphEventRef Task1Evet = TGraphTask<FMyTask>::CreateTask(nullptr, ENamedThreads::AnyThread).ConstructAndDispatchWhenReady(2,100000);
 ```
-
 `TGraphTask<TTask>::CreateTask`返回的是一个Helper对象, 用于进一步构造这个Task.
 
 ```c++
@@ -1231,13 +1187,11 @@ static FConstructor CreateTask(const FGraphEventArray* Prerequisites = NULL, ENa
 	return FConstructor(new TGraphTask(TTask::GetSubsequentsMode() == ESubsequentsMode::FireAndForget ? NULL : FGraphEvent::CreateGraphEvent(), NumPrereq), Prerequisites, CurrentThreadIfKnown);
 }
 ```
-
 1. 如果当前Task的大小(< 256 bytes), 选择用自定义的Allocator, 否则直接new.
 2. 如果TTask::GetSubsequentsMode() 不是FireAndForget就创建FGraphEvent.
 3. 将new出来的TGraphTask传给FConstructor并返回.
 
-对返回的 `FConstructor`, 可以调用 `ConstructAndDispatchWhenReady`或 `ConstructAndHold`, 它们都需要传入模板参数TTask的构造参数, 并都会用 `Placement new`在前一步构造的FGraphTask的一块内存中构造TTask:
-
+对返回的`FConstructor`, 可以调用`ConstructAndDispatchWhenReady`或`ConstructAndHold`, 它们都需要传入模板参数`TTask`的构造参数, 并都会用`Placement new`在前一步构造的`FGraphTask`的一块内存中构造`TTask`:
 ```c++
 template<typename...T>
 FGraphEventRef ConstructAndDispatchWhenReady(T&&... Args)
@@ -1253,9 +1207,7 @@ TGraphTask* ConstructAndHold(T&&... Args)
 	return Owner->Hold(Prerequisites, CurrentThreadIfKnown);
 }
 ```
-
-其中 `TaskStorage`就是一块 `uint8[sizeof(TTask)]`的内存, 在 `new TGraphTask`时就一起创建好了.
-
+其中`TaskStorage`就是一块`uint8[sizeof(TTask)]`的内存, 在`new TGraphTask`时就一起创建好了.
 ```c++
 TAlignedBytes<sizeof(TTask),alignof(TTask)> TaskStorage;
 
@@ -1266,8 +1218,7 @@ struct TAlignedBytes<Size,1>
 	uint8 Pad[Size];
 };
 ```
-
-这两个函数不同的地方在于是调用TGraphTask的Setup()或Hold().而它们唯一的区别在于, Hold()会手动给前置依赖任务的计数器加上1, 不管依赖任务如何, 都先不执行, 直到显式调用 `TGraphTask<FMyTask>->Unlock()`, 将计数器减一, 才开始执行(如果满足其它前置条件).`Setup()`在满足前置条件的情况下会直接执行.
+这两个函数不同的地方在于是调用`TGraphTask`的`Setup()`或`Hold()`.而它们唯一的区别在于, `Hold()`会手动给前置依赖任务的计数器加上1, 不管依赖任务如何, 都先不执行, 直到显式调用`TGraphTask<FMyTask>->Unlock()`, 将计数器减一, 才开始执行(如果满足其它前置条件).`Setup()`在满足前置条件的情况下会直接执行.
 
 ```c++
 // Setup() : bUnlock = true, Hold() : bUnlock = false
@@ -1294,7 +1245,6 @@ void SetupPrereqs(const FGraphEventArray* Prerequisites, ENamedThreads::Type Cur
 ```
 
 在满足依赖条件之后, Task会被加入到TaskGraph中执行:
-
 ```c++
 void QueueTask(ENamedThreads::Type CurrentThreadIfKnown)
 {
@@ -1302,22 +1252,19 @@ void QueueTask(ENamedThreads::Type CurrentThreadIfKnown)
 	FTaskGraphInterface::Get().QueueTask(this, ThreadToExecuteOn, CurrentThreadIfKnown);
 }
 ```
-
-`NP`是 `NormalThreadPriority`的缩写, 表明是在正常优先级的线程执行的。
-
+`NP`是`NormalThreadPriority`的缩写, 表明是在正常优先级的线程执行的。
 ```c++
 LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 0 
 LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 0 ,time 0.610057, Result : Find primer in range [2, 100000], total 9592 : [2, 3, 5, 7, 11, 13, 17, 19, ... ...]
 ```
 
-通常, 仅仅打印出结果是没有什么意义的, 还需要把计算出的结果聚合到一个线程内, 进一步处理业务逻辑. 所以在前面Task的基础上, 还要想办法把计算结果给回调用的线程. 这可以通过再创建一个Task, 在期望的线程执行一个委托把结果传回去:
-
+通常, 仅仅打印出结果是没有什么意义的, 还需要把计算出的结果聚合到一个线程内, 进一步处理业务逻辑. 所以在前面`Task`的基础上, 还要想办法把计算结果给回调用的线程. 这可以通过再创建一个`Task`, 在期望的线程执行一个委托把结果传回去:
 ```c++
 class FMyTask
 {
 public:
 	DECLARE_DELEGATE_ThreeParams(FOnCaculationComplete, int32 /*Begin*/, int32 /*End*/, TArray<int32> /*Result*/);
-
+	
 	//[InBegin, InEnd]v
 	// InThreadToAggregateResult 为InCallback执行的线程.
 	FMyTask(int32  InBegin, int32 InEnd, ENamedThreads::Type InThreadToAggregateResult, FOnCaculationComplete InCallback)
@@ -1371,7 +1318,7 @@ public:
 		}
 		DebugStr += "... ...]";
 		UE_LOG(LogTemp, Display, TEXT("End %s in thread: %s ,time %f, Result : %s \n"), __FUNCTIONW__, *ExcThreadName, FPlatformTime::Seconds() - BeginTime,  * DebugStr);
-
+		
 		FGraphEventRef Eve = FFunctionGraphTask::CreateAndDispatchWhenReady([InBegin = Begin, InEnd = End,InResult = Res, InCallback = Callback]()
 				{
 					if (InCallback.IsBound())
@@ -1389,15 +1336,7 @@ public:
 	FOnCaculationComplete Callback;
 };
 ```
-
-`FFunctionGraphTask::CreateAndDispatchWhenReady`封装了一种Task, 它在指定的Thread执行一个传入的可调用对象.`MyCompletionGraphEvent->DontCompleteUntil(Eve)` 将使得当前Task等Eve完成之后才会触发Event的完成, 也就是说只有Eve完成之后才会处理当前Task的后续任务.
-
-class FGenericTask
-{
-FORCEINLINE TStatId GetStatId() const;
-[static] ENamedThreads::Type GetDesiredThread();
-void DoTask(ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent);
-};
+`FFunctionGraphTask::CreateAndDispatchWhenReady`封装了一种Task, 它在指定的`Thread`执行一个传入的可调用对象.`MyCompletionGraphEvent->DontCompleteUntil(Eve)` 将使得当前`Task`等`Eve`完成之后才会触发`Event`的完成, 也就是说只有`Eve`完成之后才会处理当前`Task`的后续任务.
 
 ```c++
 // GameThread  创建计算任务并接收计算结果的地方.
@@ -1431,8 +1370,8 @@ FGraphEventRef Eve = FFunctionGraphTask::CreateAndDispatchWhenReady([WeakThis ](
 		}
 }, TStatId(), &PrerequistesAsync, ENamedThreads::GameThread);
 ```
+这里我们需要查找[0,600000]之间的所有素数, 我们将其分为三个`Task`去完成, 每个`Task`寻找一个子区间内的素数, 最后将这些结果都存到`GameThread`的一个对象的`Primes`数组中.当所有`Task`都完成后通知`GameThread`所有计算都完成, 这里直接将前面三个计算任务作为计算完成的通知任务的前置`Task`, 这些`Task`完成后会触发这一通知任务.
 
-这里我们需要查找[0,600000]之间的所有素数, 我们将其分为三个Task去完成, 每个Task寻找一个子区间内的素数, 最后将这些结果都存到GameThread的一个对象的Primes数组中.当所有Task都完成后通知GameThread所有计算都完成, 这里直接将前面三个计算任务作为计算完成的通知任务的前置Task, 这些Task完成后会触发这一通知任务.
 
 ```c++
 LogTemp: Display: Begin FMyTask::DoTask in thread : TaskGraphThreadNP 2 
@@ -1448,23 +1387,18 @@ LogTemp: Display: End FMyTask::DoTask in thread: TaskGraphThreadNP 2 ,time 6.075
 LogTemp: Display: Thread : GameThread , Get result prime : 49098
 ```
 
-## 多线程渲染
+## 5. 多线程渲染
+UE4 的渲染由三个线程`(GameThread, RenderThread, RHIThread)`配合完成, 都是`NamedThread`, 受`FTaskGraphInterface`管理.工作流程是`GameThread`向`RenderThread`的`Task`队列中添加各种渲染`Task`, `RenderThread`不断地从中取出执行, 并生成平台无关的`CommandList`, 而`RHI`线程负责调用具体的图形`API`执行这些`Command`。  
 
-UE4 的渲染由三个线程(GameThread, RenderThread, RHIThread)配合完成, 都是NamedThread, 受 `FTaskGraphInterface`管理.工作流程是GameThread向RenderThread的Task队列中添加各种渲染Task, RenderThread不断地从中取出执行, 并生成平台无关的CommandList, 而RHI线程负责调用具体的图形API执行这些Command。
-
-### 渲染线程
-
-渲染线程在引擎初始化时调用渲染模块(RenderCore)的 `StartRenderingThread()`创建:
-
+### 5.1 渲染线程
+渲染线程在引擎初始化时调用渲染模块`(RenderCore)`的`StartRenderingThread()`创建:
 ```c++
 GRenderingThreadRunnable = new FRenderingThread();
 
 GRenderingThread = 
 FRunnableThread::Create(GRenderingThreadRunnable, "RenderThread0", 0, FPlatformAffinity::GetRenderingThreadPriority(), FPlatformAffinity::GetRenderingThreadMask(), FPlatformAffinity::GetRenderingThreadFlags());
 ```
-
-而 `FRenderingThread`中开始了RenderThread的主循环:
-
+而`FRenderingThread`中开始了RenderThread的主循环:
 ```c++
 FRenderingThread::Run()
 	RenderingThreadMain( TaskGraphBoundSyncEvent );
@@ -1483,9 +1417,7 @@ FRenderingThread::Run()
 	FTaskGraphInterface::Get().ProcessThreadUntilRequestReturn(RenderThread);
 	FCoreDelegates::PreRenderingThreadDestroyed.Broadcast();
 ```
-
-其它的线程就可以用TaskGraph的接口向RenderThread中添加渲染任务, 但是通常不直接这样做, 而是通过宏 `ENQUEUE_RENDER_COMMAND(Type)`.它展开如下:
-
+其它的线程就可以用`TaskGraph`的接口向`RenderThread`中添加渲染任务, 但是通常不直接这样做, 而是通过宏`ENQUEUE_RENDER_COMMAND(Type)`.它展开如下:
 ```c++
 #define ENQUEUE_RENDER_COMMAND(Type) \
 struct Type##Name \
@@ -1495,9 +1427,7 @@ struct Type##Name \
 }; \
 EnqueueUniqueRenderCommand<Type##Name>
 ```
-
-宏参数 `Type`只是为了性能统计, 标识命令类型. 关键在于对函数 `EnqueueUniqueRenderCommand<Type##Name>()`的调用. 例如在开始一个场景的渲染时调用:
-
+宏参数`Type`只是为了性能统计, 标识命令类型. 关键在于对函数`EnqueueUniqueRenderCommand<Type##Name>()`的调用. 例如在开始一个场景的渲染时从`GameThread`调用:
 ```c++
 ENQUEUE_RENDER_COMMAND(FDrawSceneCommand)(
 	[SceneRenderer, DrawSceneEnqueue](FRHICommandListImmediate& RHICmdList)
@@ -1509,9 +1439,7 @@ ENQUEUE_RENDER_COMMAND(FDrawSceneCommand)(
 		FlushPendingDeleteRHIResources_RenderThread();
 	});
 ```
-
 最终展开为:
-
 ```c++
 // 性能统计用
 struct FDrawSceneCommandName 
@@ -1526,9 +1454,7 @@ EnqueueUniqueRenderCommand<FDrawSceneCommandName>(
 				FlushPendingDeleteRHIResources_RenderThread();
 			});
 ```
-
-其中 `EnqueueUniqueRenderCommand`:
-
+其中`EnqueueUniqueRenderCommand`:
 ```c++
 template<typename TSTR, typename LAMBDA>
 FORCEINLINE_DEBUGGABLE void EnqueueUniqueRenderCommand(LAMBDA&& Lambda)
@@ -1561,18 +1487,15 @@ FORCEINLINE_DEBUGGABLE void EnqueueUniqueRenderCommand(LAMBDA&& Lambda)
 	}
 }
 ```
-
-这里处理了各种执行情况, 单线程, 多线程, 根据当前线程跳过TaskGraph的流程等等.但不论哪一种情况, 执行方式都是一样的:
-
+这里处理了各种执行情况, 单线程, 多线程, 根据当前线程跳过`TaskGraph`的流程等等.但不论哪一种情况, 执行方式都是一样的:
 ```c++
 FRHICommandListImmediate& RHICmdList = GetImmediateCommandList_ForRenderCommand();
 Lambda(RHICmdList);
 ```
+通常这个Lambda里会调用Rendering模块的功能渲染场景, 生成平台无关的渲染命令, 并传给RHI线程执行.
 
-### RHI线程
-
-在 `StartRenderingThread()`中创建RenderThread之前会创建 `RHI`线程:
-
+### 5.2 RHI线程
+在`StartRenderingThread()`中创建`RenderThread`之前会创建`RHI`线程:
 ```c++
 // FRHIThread::Get().Start();
 void FRHIThread::Start()
@@ -1597,10 +1520,9 @@ virtual uint32 FRHIThread::Run() override
 }
 ```
 
-在使用 `ENQUEUE_RENDER_COMMAND(Type)`给RenderThread执行的Lambda中必定会接受一个参数 `FRHICommandListImmediate& RHICmdList`, 这个参数一般是在执行RenderThread的Task时, 从RHI模块的一个全局变量传过来的, 在RenderThread中就会通过它发送渲染指令.
+在使用`ENQUEUE_RENDER_COMMAND(Type)`给`RenderThread`执行的`Lambda`中必定会接受一个参数`FRHICommandListImmediate& RHICmdList`, 这个参数一般是在执行`RenderThread`的`Task`时, 从`RHI`模块的一个全局变量传过来的, 在`RenderThread`中就会通过它发送渲染指令.
 
-但是这并不会立即给 `RHI Thread`执行, 例如:
-
+但是这并不会立即给`RHI Thread`执行, 例如:
 ```c++
 void FRHICommandList::DrawPrimitive(uint32 BaseVertexIndex, uint32 NumPrimitives, uint32 NumInstances)
 {
@@ -1613,9 +1535,7 @@ void FRHICommandList::DrawPrimitive(uint32 BaseVertexIndex, uint32 NumPrimitives
 	ALLOC_COMMAND(FRHICommandDrawPrimitive)(BaseVertexIndex, NumPrimitives, NumInstances);
 }
 ```
-
-而 `ALLOC_COMMAND`展开为:
-
+而`ALLOC_COMMAND`展开为: 
 ```c++
 #define ALLOC_COMMAND(...) new ( AllocCommand(sizeof(__VA_ARGS__), alignof(__VA_ARGS__)) ) __VA_ARGS__
 
@@ -1624,8 +1544,7 @@ ALLOC_COMMAND(FRHICommandDrawPrimitive)(BaseVertexIndex, NumPrimitives, NumInsta
 new ( AllocCommand(sizeof(FRHICommandDrawPrimitive), alignof(FRHICommandDrawPrimitive)) ) FRHICommandDrawPrimitive(BaseVertexIndex, NumPrimitives, NumInstances);
 ```
 
-这是一个placement new, `AllocCommand`则是开辟了一块 `FRHICommandDrawPrimitive`大小的内存, 并将其添加到Command链表中, 这个链表保存了当前添加的所有命令.
-
+这是一个`placement new`, `AllocCommand`则是开辟了一块`FRHICommandDrawPrimitive`大小的内存, 并将其添加到`Command`链表中, 这个链表保存了当前添加的所有命令.
 ```c++
 FORCEINLINE_DEBUGGABLE void* AllocCommand(int32 AllocSize, int32 Alignment)
 {
@@ -1637,9 +1556,7 @@ FORCEINLINE_DEBUGGABLE void* AllocCommand(int32 AllocSize, int32 Alignment)
 	return Result;
 }
 ```
-
-随后在这块内存上用 `FRHICommandDrawPrimitive`的构造函数初始化, 而它定义为:
-
+随后在这块内存上用`FRHICommandDrawPrimitive`的构造函数初始化, 而它定义为:
 ```c++
 FRHICOMMAND_MACRO(FRHICommandDrawPrimitive)
 {
@@ -1655,10 +1572,10 @@ FRHICOMMAND_MACRO(FRHICommandDrawPrimitive)
 	RHI_API void Execute(FRHICommandListBase& CmdList);
 };
 // 上面的宏可以展开为
-struct FRHICommandDrawPrimitiveString1001	
-{														
-	static const TCHAR* TStr() { return TEXT("FRHICommandDrawPrimitive"); }
-};														
+struct FRHICommandDrawPrimitiveString1001				
+{																	
+	static const TCHAR* TStr() { return TEXT("FRHICommandDrawPrimitive"); }		
+};																	
 struct FRHICommandDrawPrimitive final : public FRHICommand<FRHICommandDrawPrimitive, FRHICommandDrawPrimitiveString1001>
 {
 	uint32 BaseVertexIndex;
@@ -1691,7 +1608,7 @@ struct FRHICommand : public FRHICommandBase
 	void ExecuteAndDestruct(FRHICommandListBase& CmdList, FRHICommandListDebugContext& Context) override final
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE_ON_CHANNEL_STR(NameType::TStr(), RHICommandsChannel);
-
+		
 		TCmd *ThisCmd = static_cast<TCmd*>(this);
 #if RHI_COMMAND_LIST_DEBUG_TRACES
 		ThisCmd->StoreDebugInfo(Context);
@@ -1703,9 +1620,7 @@ struct FRHICommand : public FRHICommandBase
 	virtual void StoreDebugInfo(FRHICommandListDebugContext& Context) {};
 };
 ```
-
-由此可见, 所有的RHI命令都是事先实现好的:
-
+由此可见, 所有的`RHI`令都是事先实现好的:
 ```c++
 FRHICOMMAND_MACRO(FRHICommandSetViewport)
 FRHICOMMAND_MACRO(FRHICommandSetStereoViewport)
@@ -1757,22 +1672,28 @@ FRHICOMMAND_MACRO(FRHICommandInvalidateCachedState)
 FRHICOMMAND_MACRO(FRHICommandDiscardRenderTargets)
 FRHICOMMAND_MACRO(FRHICommandDebugBreak)
 ```
-
-RenderThread通过CmdList添加各种命令到RHI命令列表中,这些命令用一个链表前后串联起来, 最后在恰当的时候创建Task, 将整个CmdList拷贝一份到RHI线程执行:
-
+`RenderThread`通过`CmdList`添加各种命令到`RHI`命令列表中,这些命令用一个链表前后串联起来, 最后在恰当的时候创建`Task`, 将整个`CmdList`拷贝一份到`RHI`线程执行:
 ```c++
 void FRHICommandListImmediate::ImmediateFlush(EImmediateFlushType::Type FlushType)
 void FRHICommandListExecutor::ExecuteList(FRHICommandListBase& CmdList)
 void FRHICommandListExecutor::ExecuteInner(FRHICommandListBase& CmdList)
 
 RHIThreadTask = TGraphTask<FExecuteRHIThreadTask>::CreateTask(&Prereq, ENamedThreads::GetRenderThread()).ConstructAndDispatchWhenReady(SwapCmdList);
-
 ```
 
 ![RHICommandList](./image/RHICommandList.png)
 
-* UE4.26 Source Code
-* https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
+## Reference
+* UE4 SourceCode https://github.com/EpicGames/UnrealEngine
+
+* https://www.cnblogs.com/timlly/p/14327537.html
+
 * https://zhuanlan.zhihu.com/p/38881269
-* https://michaeljcole.github.io/wiki.unrealengine.com/Multi-Threading:_Task_Graph_System/
+
 * https://zhuanlan.zhihu.com/p/57928032
+
+* https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
+
+* Book : https://item.jd.com/13517424.html
+
+* https://michaeljcole.github.io/wiki.unrealengine.com/Multi-Threading:_Task_Graph_System/
