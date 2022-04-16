@@ -1,7 +1,3 @@
-```
-作者：刘垣渝
-```
-
 # UE4 多线程渲染基础
 
 这篇文章主要目的是分析UE4的多线程渲染实现. 基于此目的, 先深入分析了UE4中多线程的实现, 其中最重要的是TaskGraph的实现，多线程渲染就是基于它实现的。最后梳理了整个多线程渲染的流程，Gamethread，RenderThread，RHI Thread三者的交互方式。
@@ -1775,6 +1771,7 @@ RHIThreadTask = TGraphTask<FExecuteRHIThreadTask>::CreateTask(&Prereq, ENamedThr
 
 ![RHICommandList](./image/RHICommandList.png)
 
+* UE4.26 Source Code
 * https://stackoverflow.com/questions/4537753/when-should-i-use-mm-sfence-mm-lfence-and-mm-mfence
 * https://zhuanlan.zhihu.com/p/38881269
 * https://michaeljcole.github.io/wiki.unrealengine.com/Multi-Threading:_Task_Graph_System/
