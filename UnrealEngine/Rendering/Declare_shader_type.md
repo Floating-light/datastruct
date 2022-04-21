@@ -10,7 +10,7 @@ DECLARE_SHADER_TYPE(TBasePassPS,MeshMaterial);
 ```c++
 #define DECLARE_EXPORTED_SHADER_TYPE(ShaderClass,ShaderMetaTypeShortcut,RequiredAPI, ...) \
 	INTERNAL_DECLARE_SHADER_TYPE_COMMON(ShaderClass, ShaderMetaTypeShortcut, RequiredAPI); \
-	DECLARE_EXPORTED_TYPE_LAYOUT(ShaderClass, RequiredAPI, NonVirtual); \
+	DECLARE_EXPORTED_TYPE_LAYOUT(ShaderClass, RequiredAPI, NonVirtual); // Shader layout, 和前面一样
 	public:
 ```
 
@@ -26,16 +26,36 @@ DECLARE_SHADER_TYPE(TBasePassPS,MeshMaterial);
 ```
 
 ```c++
-#define SHADER_DECLARE_VTABLE(ShaderClass) \
-	static FShader* ConstructSerializedInstance() { return new ShaderClass(); } \
+#define SHADER_DECLARE_VTABLE(TBasePassPS) \
+	static FShader* ConstructSerializedInstance() { return new TBasePassPS(); } \
 	static FShader* ConstructCompiledInstance(const typename FShader::CompiledShaderInitializerType& Initializer) \
-	{ return new ShaderClass(static_cast<const typename ShaderMetaType::CompiledShaderInitializerType&>(Initializer)); }\
+	{ return new TBasePassPS(static_cast<const typename ShaderMetaType::CompiledShaderInitializerType&>(Initializer)); }\
 	static void ModifyCompilationEnvironmentImpl(const FShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment) \
 	{ \
-		const typename ShaderClass::FPermutationDomain PermutationVector(Parameters.PermutationId); \
+		const typename TBasePassPS::FPermutationDomain PermutationVector(Parameters.PermutationId); \
 		PermutationVector.ModifyCompilationEnvironment(OutEnvironment); \
-		ShaderClass::ModifyCompilationEnvironment(static_cast<const typename ShaderClass::FPermutationParameters&>(Parameters), OutEnvironment); \
+		TBasePassPS::ModifyCompilationEnvironment(static_cast<const typename TBasePassPS::FPermutationParameters&>(Parameters), OutEnvironment); \
 	} \
 	static bool ShouldCompilePermutationImpl(const FShaderPermutationParameters& Parameters) \
-	{ return ShaderClass::ShouldCompilePermutation(static_cast<const typename ShaderClass::FPermutationParameters&>(Parameters)); }
+	{ return TBasePassPS::ShouldCompilePermutation(static_cast<const typename TBasePassPS::FPermutationParameters&>(Parameters)); }
 ```
+
+INTERNAL_DECLARE_SHADER_TYPE_COMMON最后展开为：
+```c++
+public: \
+using ShaderMetaType = FMeshMaterialShaderType; \
+using ShaderMapType = FMeshMaterialShaderMap; \
+static RequiredAPI ShaderMetaType StaticType; 
+static FShader* ConstructSerializedInstance() { return new TBasePassPS(); } \
+static FShader* ConstructCompiledInstance(const typename FShader::CompiledShaderInitializerType& Initializer) \
+{ return new TBasePassPS(static_cast<const typename ShaderMetaType::CompiledShaderInitializerType&>(Initializer)); }\
+static void ModifyCompilationEnvironmentImpl(const FShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment) \
+{ \
+	const typename TBasePassPS::FPermutationDomain PermutationVector(Parameters.PermutationId); \
+	PermutationVector.ModifyCompilationEnvironment(OutEnvironment); \
+	TBasePassPS::ModifyCompilationEnvironment(static_cast<const typename TBasePassPS::FPermutationParameters&>(Parameters), OutEnvironment); \
+} \
+static bool ShouldCompilePermutationImpl(const FShaderPermutationParameters& Parameters) \
+{ return TBasePassPS::ShouldCompilePermutation(static_cast<const typename TBasePassPS::FPermutationParameters&>(Parameters)); }
+```
+其中FMeshMaterialShaderType是我们在外部自己定义好的ShaderType, 其作为静态成员，将初始化成唯一代表这个Shader的ShaderType, 并把自己注册到全局的链表中.
