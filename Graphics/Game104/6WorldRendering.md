@@ -42,3 +42,24 @@ projectedPosition /= isHole ? 0 : 1
 洞, 各种奇怪的结构, 而不局限于平坦地面.
 
 Marching Cubes.
+
+## Floating point precision error 
+
+## Tree Rendering
+SpeedTree
+## Decorator rendering 
+
+## Road and Decals Rendering 
+
+## 大气散射
+
+a scalable and production ready sky and atmosphere rendering technique
+
+## Cloud
+
+### Mesh-Based Cloud Modeling
+
+### Billboard Cloud 
+
+### Volumetric cloud modeling 
+
