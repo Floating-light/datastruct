@@ -1,5 +1,6 @@
 每一个DECLARE_SHADER_TYPE，在对应的cpp文件都有一个IMPLEMENT_MATERIAL_SHADER_TYPE.
 ```c++
+// 针对材质
 #define IMPLEMENT_MATERIAL_SHADER_TYPE(TemplatePrefix,ShaderClass,SourceFilename,FunctionName,Frequency) 
 	IMPLEMENT_SHADER_TYPE( 
 		TemplatePrefix, 
