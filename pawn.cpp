@@ -43,5 +43,5 @@ int slove(vector<vector<int>>& in)
 
 int main()
 {
-
+    std::cout << "Test " << std::ednl;
 }
